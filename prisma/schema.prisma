@@ -3,21 +3,32 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Pooled connection (PgBouncer / Prisma Accelerate / Neon pooler) used by the app at runtime.
+  url       = env("DATABASE_URL")
+  // Direct (non-pooled) connection used by `prisma migrate` / `prisma db push`.
+  // Falls back to DATABASE_URL if unset.
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      String   @default("USER")
-  status    String   @default("ACTIVE")
-  planId    String?
-  plan      Plan?    @relation(fields: [planId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  password     String
+  role         String   @default("USER")
+  status       String   @default("ACTIVE")
+  // Bumped to invalidate all existing JWTs for this user (logout-everywhere / suspend).
+  tokenVersion Int      @default(0)
+  planId       String?
+  plan         Plan?    @relation(fields: [planId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Analytics filters on (role, status, createdAt); plan distribution joins on planId.
+  @@index([role, status, createdAt])
+  @@index([planId])
+  @@index([createdAt])
 }
 
 model Plan {
@@ -51,6 +62,9 @@ model Client {
   clientNotes   ClientNote[]
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+
+  @@index([status, createdAt])
+  @@index([createdAt])
 }
 
 model License {
@@ -62,10 +76,15 @@ model License {
   issued     DateTime @default(now())
   expiry     DateTime
   status     String   @default("active")
-  licenseKey String
+  licenseKey String   @unique
   fileName   String
   notes      String?
   createdAt  DateTime @default(now())
+
+  @@index([clientId])
+  // Dashboard "expiring soon" / alerts query filters on (status, expiry).
+  @@index([status, expiry])
+  @@index([createdAt])
 }
 
 model ApiKey {
@@ -80,6 +99,11 @@ model ApiKey {
   lastUsed  DateTime?
   expiresAt DateTime?
   createdAt DateTime  @default(now())
+
+  @@index([clientId])
+  // Runtime key verification looks up by prefix, then constant-time compares the hash.
+  @@index([keyPrefix])
+  @@index([createdAt])
 }
 
 model ClientNote {
@@ -88,6 +112,8 @@ model ClientNote {
   client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   note      String
   createdAt DateTime @default(now())
+
+  @@index([clientId, createdAt])
 }
 
 model PasswordResetToken {
@@ -97,6 +123,8 @@ model PasswordResetToken {
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model PendingPayment {
@@ -106,9 +134,12 @@ model PendingPayment {
   planName  String
   amount    Float
   utr       String
-  status    String   @default("pending")  // pending | approved | rejected
+  status    String   @default("pending") // pending | approved | rejected
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status, createdAt])
 }
 
 model ActivityLog {
@@ -118,4 +149,8 @@ model ActivityLog {
   entityId   String?
   details    String?
   createdAt  DateTime @default(now())
+
+  // Fast-growing table: index the columns the activity feed filters/sorts on.
+  @@index([createdAt])
+  @@index([action, createdAt])
 }
