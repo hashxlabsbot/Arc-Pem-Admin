@@ -1,8 +1,9 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
-const DATABASE_URL = process.env.DATABASE_URL ?? 'file:./dev.db'
-process.env.DATABASE_URL = DATABASE_URL
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL must be set (PostgreSQL connection string) before seeding.')
+}
 
 const prisma = new PrismaClient()
 
@@ -77,7 +78,7 @@ async function main() {
   })
 
   // Create Admin
-  const adminPassword = await bcrypt.hash('Admin@123', 10)
+  const adminPassword = await bcrypt.hash('Ankit@123', 10)
   await prisma.user.create({
     data: {
       name: 'Admin',

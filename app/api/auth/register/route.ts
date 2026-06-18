@@ -37,10 +37,20 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = email.trim().toLowerCase()
-    const rl = checkRateLimit(`register:${normalizedEmail}`)
-    if (!rl.allowed) {
+
+    // Throttle by both email and source IP so registration can't be spammed
+    // either against one address or from one host across many addresses.
+    const ip =
+      req.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+      req.headers.get('x-real-ip') ||
+      'unknown'
+    const [emailRl, ipRl] = await Promise.all([
+      checkRateLimit(`register:${normalizedEmail}`),
+      checkRateLimit(`register-ip:${ip}`),
+    ])
+    if (!emailRl.allowed || !ipRl.allowed) {
       return NextResponse.json(
-        { error: 'Too many registration attempts for this email. Try again in 15 minutes.' },
+        { error: 'Too many registration attempts. Please try again in 15 minutes.' },
         { status: 429, headers: CORS_HEADERS }
       )
     }
@@ -55,7 +65,10 @@ export async function POST(req: NextRequest) {
 
     const existing = await db.user.findUnique({ where: { email: normalizedEmail } })
     if (existing) {
-      recordFailure(`register:${normalizedEmail}`)
+      await Promise.all([
+        recordFailure(`register:${normalizedEmail}`),
+        recordFailure(`register-ip:${ip}`),
+      ])
       return NextResponse.json(
         { error: 'An account with this email already exists.' },
         { status: 409, headers: CORS_HEADERS }

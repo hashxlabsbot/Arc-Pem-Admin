@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { logger } from '@/lib/logger'
+
+// Authenticated, per-request endpoint — never statically prerender.
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
@@ -13,38 +17,44 @@ export async function GET() {
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    // Build date boundaries for last 6 months up-front
+    // Build labels for the last 6 months (keyed by YYYY-MM for joining the
+    // aggregated query result below).
     const monthBoundaries = Array.from({ length: 6 }, (_, i) => {
       const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1)
       return {
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
         label: d.toLocaleString('default', { month: 'short' }),
-        start: new Date(d.getFullYear(), d.getMonth(), 1),
-        end:   new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59),
       }
     })
-    const sixMonthsAgo = monthBoundaries[0].start
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
 
-    // Fetch all counts in one round-trip
-    const [totalUsers, activeUsers, newThisMonth, usersWithPlan, planDist, recentUsers] =
+    // Aggregate signups per month in the database (GROUP BY) instead of pulling
+    // every row into Node memory. Scales to millions of users.
+    const monthlyRows = await db.$queryRaw<{ month: string; count: bigint }[]>`
+      SELECT to_char(date_trunc('month', "createdAt"), 'YYYY-MM') AS month,
+             COUNT(*) AS count
+      FROM "User"
+      WHERE "role" = 'USER' AND "createdAt" >= ${sixMonthsAgo}
+      GROUP BY 1
+    `
+    const monthlyMap = new Map(monthlyRows.map((r) => [r.month, Number(r.count)]))
+
+    // Remaining aggregate counts in one round-trip.
+    const [totalUsers, activeUsers, newThisMonth, usersWithPlan, planDist] =
       await Promise.all([
         db.user.count({ where: { role: 'USER' } }),
         db.user.count({ where: { role: 'USER', status: 'ACTIVE' } }),
         db.user.count({ where: { role: 'USER', createdAt: { gte: startOfMonth } } }),
         db.user.count({ where: { role: 'USER', planId: { not: null } } }),
         db.plan.findMany({ include: { _count: { select: { users: true } } } }),
-        db.user.findMany({
-          where: { role: 'USER', createdAt: { gte: sixMonthsAgo } },
-          select: { createdAt: true },
-        }),
       ])
 
     const conversionRate =
       totalUsers > 0 ? Math.round((usersWithPlan / totalUsers) * 100) : 0
 
-    // Bucket recentUsers into months in memory — no extra DB queries
-    const monthlyData = monthBoundaries.map(({ label, start, end }) => ({
+    const monthlyData = monthBoundaries.map(({ key, label }) => ({
       month: label,
-      count: recentUsers.filter((u) => u.createdAt >= start && u.createdAt <= end).length,
+      count: monthlyMap.get(key) ?? 0,
     }))
 
     const planDistribution = planDist.map((p) => ({
@@ -61,7 +71,7 @@ export async function GET() {
       planDistribution,
     })
   } catch (err) {
-    console.error('[GET /api/analytics]', err)
+    logger.error('GET /api/analytics failed', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

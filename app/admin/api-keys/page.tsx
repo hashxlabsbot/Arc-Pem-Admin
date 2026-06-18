@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Plus, Search, Copy, Check, ShieldOff, Trash2, Key } from 'lucide-react'
+import { usePaginatedList } from '@/lib/use-paginated-list'
+import { Pagination } from '@/components/admin/Pagination'
 
 interface Client {
   id: string
@@ -24,9 +26,7 @@ interface ApiKey {
 const ALL_SCOPES = ['read', 'write', 'admin']
 
 export default function ApiKeysPage() {
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
   const [clients, setClients] = useState<Client[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showModal, setShowModal] = useState(false)
@@ -37,25 +37,27 @@ export default function ApiKeysPage() {
   const [copied, setCopied] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
-  async function fetchAll() {
-    setLoading(true)
-    try {
-      const [keyRes, clientRes] = await Promise.all([
-        fetch('/api/api-keys'),
-        fetch('/api/clients'),
-      ])
-      const keyData = await keyRes.json()
-      const clientData = await clientRes.json()
-      setApiKeys(keyData.apiKeys || [])
-      setClients(clientData.clients || [])
-    } catch {
-      setError('Failed to load data')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const {
+    items: apiKeys,
+    pagination,
+    stats,
+    loading,
+    setPage,
+    refresh: fetchKeys,
+  } = usePaginatedList<ApiKey>({
+    url: '/api/api-keys',
+    itemsKey: 'apiKeys',
+    search,
+    filters: { status: statusFilter },
+  })
 
-  useEffect(() => { fetchAll() }, [])
+  // The client picker for the create form needs the client list (capped page).
+  useEffect(() => {
+    fetch('/api/clients?pageSize=200')
+      .then((r) => r.json())
+      .then((d) => setClients(d.clients ?? []))
+      .catch(() => {})
+  }, [])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -76,7 +78,7 @@ export default function ApiKeysPage() {
       setNewRawKey(data.rawKey)
       setShowModal(false)
       setForm({ clientId: '', name: '', scopes: [], expiresAt: '' })
-      fetchAll()
+      fetchKeys()
     } catch {
       setError('Failed to create API key')
     } finally {
@@ -86,13 +88,13 @@ export default function ApiKeysPage() {
 
   async function handleRevoke(id: string) {
     await fetch(`/api/api-keys/${id}/revoke`, { method: 'PATCH' })
-    fetchAll()
+    fetchKeys()
   }
 
   async function handleDelete(id: string) {
     await fetch(`/api/api-keys/${id}`, { method: 'DELETE' })
     setDeleteId(null)
-    fetchAll()
+    fetchKeys()
   }
 
   function toggleScope(scope: string) {
@@ -109,17 +111,8 @@ export default function ApiKeysPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const filtered = apiKeys.filter((k) => {
-    const matchSearch =
-      !search ||
-      k.client.name.toLowerCase().includes(search.toLowerCase()) ||
-      k.name.toLowerCase().includes(search.toLowerCase())
-    const matchStatus = statusFilter === 'all' || k.status === statusFilter
-    return matchSearch && matchStatus
-  })
-
-  const activeCount = apiKeys.filter((k) => k.status === 'active').length
-  const revokedCount = apiKeys.filter((k) => k.status === 'revoked').length
+  const activeCount = stats.active ?? 0
+  const revokedCount = stats.revoked ?? 0
 
   return (
     <div className="space-y-5">
@@ -218,7 +211,7 @@ export default function ApiKeysPage() {
         <div className="h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500" />
         {loading ? (
           <div className="py-16 text-center text-gray-400">Loading...</div>
-        ) : filtered.length === 0 ? (
+        ) : apiKeys.length === 0 ? (
           <div className="py-16 text-center text-gray-400">No API keys found.</div>
         ) : (
           <div className="overflow-x-auto">
@@ -236,7 +229,7 @@ export default function ApiKeysPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((k) => {
+                {apiKeys.map((k) => {
                   let scopes: string[] = []
                   try { scopes = JSON.parse(k.scopes) } catch {}
                   return (
@@ -289,6 +282,9 @@ export default function ApiKeysPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!loading && apiKeys.length > 0 && (
+          <Pagination pagination={pagination} onPageChange={setPage} label="API key" />
         )}
       </div>
 

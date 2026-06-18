@@ -2,6 +2,32 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { logger } from '@/lib/logger'
+import type { Prisma } from '@prisma/client'
+
+// Authenticated, per-request endpoint — never statically prerender.
+export const dynamic = 'force-dynamic'
+
+const MAX_LIMIT = 100
+const DEFAULT_LIMIT = 20
+
+// The distinct list of actions changes rarely, but the `distinct` scan is
+// expensive on a large, fast-growing table. Cache it in-process for a minute.
+let actionsCache: { value: string[]; at: number } | null = null
+const ACTIONS_TTL_MS = 60 * 1000
+
+async function getActions(): Promise<string[]> {
+  if (actionsCache && Date.now() - actionsCache.at < ACTIONS_TTL_MS) {
+    return actionsCache.value
+  }
+  const rows = await db.activityLog.findMany({
+    select: { action: true },
+    distinct: ['action'],
+  })
+  const value = rows.map((a) => a.action)
+  actionsCache = { value, at: Date.now() }
+  return value
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,22 +37,25 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url)
-    const page = parseInt(searchParams.get('page') || '1', 10)
-    const limit = parseInt(searchParams.get('limit') || '20', 10)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1)
+    const limit = Math.min(
+      MAX_LIMIT,
+      Math.max(1, parseInt(searchParams.get('limit') || `${DEFAULT_LIMIT}`, 10) || DEFAULT_LIMIT)
+    )
     const action = searchParams.get('action') || ''
     const search = searchParams.get('search') || ''
 
-    const where: Record<string, unknown> = {}
+    const where: Prisma.ActivityLogWhereInput = {}
     if (action) where.action = action
     if (search) {
       where.OR = [
-        { action: { contains: search } },
-        { entityType: { contains: search } },
-        { details: { contains: search } },
+        { action: { contains: search, mode: 'insensitive' } },
+        { entityType: { contains: search, mode: 'insensitive' } },
+        { details: { contains: search, mode: 'insensitive' } },
       ]
     }
 
-    const [rows, total] = await Promise.all([
+    const [rows, total, actions] = await Promise.all([
       db.activityLog.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -34,14 +63,8 @@ export async function GET(req: NextRequest) {
         take: limit,
       }),
       db.activityLog.count({ where }),
+      getActions(),
     ])
-
-    const allActions = await db.activityLog.findMany({
-      select: { action: true },
-      distinct: ['action'],
-    })
-
-    const actions = allActions.map((a) => a.action)
 
     return NextResponse.json({
       rows,
@@ -51,7 +74,7 @@ export async function GET(req: NextRequest) {
       actions,
     })
   } catch (err) {
-    console.error('[GET /api/activity]', err)
+    logger.error('GET /api/activity failed', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

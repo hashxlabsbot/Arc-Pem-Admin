@@ -1,53 +1,28 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Download, Search } from 'lucide-react'
 import { UserTable } from '@/components/admin/UserTable'
-import type { PlanWithCount, UserWithPlan } from '@/types'
-import { formatDate } from '@/lib/utils'
+import type { PlanWithCount } from '@/types'
 
 export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [planFilter, setPlanFilter] = useState('ALL')
   const [plans, setPlans] = useState<PlanWithCount[]>([])
-  const [users, setUsers] = useState<UserWithPlan[]>([])
-
-  const fetchData = useCallback(async () => {
-    const [plansRes, usersRes] = await Promise.all([
-      fetch('/api/subscriptions'),
-      fetch('/api/users'),
-    ])
-    const plansData = await plansRes.json()
-    const usersData = await usersRes.json()
-    setPlans(plansData.plans ?? [])
-    setUsers(usersData.users ?? [])
-  }, [])
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    fetch('/api/subscriptions')
+      .then((r) => r.json())
+      .then((d) => setPlans(d.plans ?? []))
+      .catch(() => {})
+  }, [])
 
+  // Export the full filtered set via the server (streamed), not just the
+  // rows currently on screen.
   function exportCSV() {
-    const headers = ['Name', 'Email', 'Role', 'Status', 'Plan', 'Joined']
-    const rows = users.map((u) => [
-      u.name,
-      u.email,
-      u.role,
-      u.status,
-      u.plan?.name ?? 'No Plan',
-      formatDate(u.createdAt),
-    ])
-    const csv = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `arc-pem-users-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    const params = new URLSearchParams({ search, status: statusFilter, plan: planFilter })
+    window.open(`/api/users/export?${params.toString()}`, '_blank')
   }
 
   return (

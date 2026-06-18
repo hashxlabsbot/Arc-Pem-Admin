@@ -1,6 +1,9 @@
 import { db } from '@/lib/db'
 import { Users, UserPlus, TrendingUp } from 'lucide-react'
 
+// Live, admin-only dashboard data — render per request, never prerender.
+export const dynamic = 'force-dynamic'
+
 async function getAnalytics() {
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)

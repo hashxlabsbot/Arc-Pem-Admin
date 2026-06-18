@@ -5,6 +5,9 @@ import {
   UserCheck, UserPlus, AlertTriangle, Key,
 } from 'lucide-react'
 
+// Live, admin-only dashboard data — render per request, never prerender.
+export const dynamic = 'force-dynamic'
+
 async function getStats() {
   const now          = new Date()
   const in30Days     = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)

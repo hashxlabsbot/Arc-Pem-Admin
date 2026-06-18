@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Plus, Search, Download, ShieldOff, ShieldCheck, CalendarDays,
   Copy, Check, KeyRound, X, ShieldAlert, Clock, RefreshCw,
   LayoutList, Activity, AlertTriangle, Ban,
 } from 'lucide-react'
+import { usePaginatedList } from '@/lib/use-paginated-list'
+import { Pagination } from '@/components/admin/Pagination'
 
 interface Client { id: string; name: string; email: string }
 interface License {
@@ -82,9 +84,7 @@ function KpiCard({ label, value, gradient, border, iconBg, icon, accent }: {
 }
 
 export default function LicensesPage() {
-  const [licenses, setLicenses]         = useState<License[]>([])
   const [clients, setClients]           = useState<Client[]>([])
-  const [loading, setLoading]           = useState(true)
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showGen, setShowGen]           = useState(false)
@@ -107,17 +107,27 @@ export default function LicensesPage() {
     setGenForm(f => { const ids = [...f.machineIds]; ids[idx] = val; return { ...f, machineIds: ids } })
   }
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [a, b] = await Promise.all([fetch('/api/licenses'), fetch('/api/clients')])
-      const [ld, cd] = await Promise.all([a.json(), b.json()])
-      setLicenses(ld.licenses || [])
-      setClients(cd.clients || [])
-    } catch { setError('Failed to load data') }
-    finally { setLoading(false) }
+  const {
+    items: licenses,
+    pagination,
+    stats,
+    loading,
+    setPage,
+    refresh: load,
+  } = usePaginatedList<License>({
+    url: '/api/licenses',
+    itemsKey: 'licenses',
+    search,
+    filters: { status: statusFilter },
+  })
+
+  // Client list for the "Generate License" picker (capped page).
+  useEffect(() => {
+    fetch('/api/clients?pageSize=200')
+      .then((r) => r.json())
+      .then((d) => setClients(d.clients ?? []))
+      .catch(() => {})
   }, [])
-  useEffect(() => { load() }, [load])
 
   async function generate(e: React.FormEvent) {
     e.preventDefault(); setSubmitting(true); setError('')
@@ -147,16 +157,10 @@ export default function LicensesPage() {
     URL.revokeObjectURL(a.href)
   }
 
-  const filtered = licenses.filter(l =>
-    (statusFilter === 'all' || l.status === statusFilter) &&
-    (!search || l.client.name.toLowerCase().includes(search.toLowerCase()) ||
-     l.machineId.toLowerCase().includes(search.toLowerCase()))
-  )
-
-  const total    = licenses.length
-  const active   = licenses.filter(l => l.status === 'active' && daysUntil(l.expiry) >= 0).length
-  const expiring = licenses.filter(l => l.status === 'active' && daysUntil(l.expiry) >= 0 && daysUntil(l.expiry) <= 30).length
-  const inactive = licenses.filter(l => l.status === 'revoked' || (l.status !== 'revoked' && daysUntil(l.expiry) < 0)).length
+  const total    = stats.total ?? 0
+  const active   = stats.active ?? 0
+  const expiring = stats.expiring ?? 0
+  const inactive = stats.inactive ?? 0
 
   return (
     <div className="space-y-5">
@@ -224,7 +228,7 @@ export default function LicensesPage() {
             <RefreshCw size={22} className="animate-spin text-indigo-400"/>
             <span className="text-sm">Loading licenses…</span>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : licenses.length === 0 ? (
           <div className="py-20 flex flex-col items-center gap-3 text-gray-400">
             <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-1">
               <KeyRound size={26} className="text-gray-300"/>
@@ -255,7 +259,7 @@ export default function LicensesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map(lic => (
+                {licenses.map(lic => (
                   <tr key={lic.id} className="hover:bg-slate-50/70 transition-colors group">
 
                     {/* Client */}
@@ -347,17 +351,10 @@ export default function LicensesPage() {
               </tbody>
             </table>
 
-            {/* Footer */}
-            <div className="px-4 py-3 border-t border-gray-50 bg-slate-50/50 flex items-center justify-between">
-              <span className="text-xs text-gray-400">
-                Showing <span className="font-semibold text-gray-600">{filtered.length}</span> of <span className="font-semibold text-gray-600">{total}</span> license{total !== 1 ? 's' : ''}
-              </span>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-xs text-gray-400">{active} active</span>
-              </div>
-            </div>
           </div>
+        )}
+        {!loading && licenses.length > 0 && (
+          <Pagination pagination={pagination} onPageChange={setPage} label="license" />
         )}
       </div>
 

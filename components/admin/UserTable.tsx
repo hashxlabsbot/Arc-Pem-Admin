@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Trash2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -13,54 +13,70 @@ interface UserTableProps {
   planFilter: string
 }
 
-const PAGE_SIZE = 10
+interface Pagination {
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
 
 export function UserTable({ search, statusFilter, planFilter }: UserTableProps) {
   const [users, setUsers] = useState<UserWithPlan[]>([])
   const [plans, setPlans] = useState<PlanWithCount[]>([])
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, pageSize: 50, total: 0, totalPages: 1 })
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
+  // Debounce the search box so we issue one request after typing settles,
+  // not one per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Any filter change resets to the first page.
+  useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, statusFilter, planFilter])
+
+  // Load the plan list once for the plan dropdown.
+  useEffect(() => {
+    fetch('/api/subscriptions')
+      .then((r) => r.json())
+      .then((d) => setPlans(d.plans ?? []))
+      .catch(() => {})
+  }, [])
+
+  // Avoid a stale response from an earlier filter overwriting a newer one.
+  const reqId = useRef(0)
+
   const fetchUsers = useCallback(async () => {
+    const myReq = ++reqId.current
     setLoading(true)
     try {
-      const [usersRes, plansRes] = await Promise.all([
-        fetch('/api/users'),
-        fetch('/api/subscriptions'),
-      ])
-      const usersData = await usersRes.json()
-      const plansData = await plansRes.json()
-      setUsers(usersData.users ?? [])
-      setPlans(plansData.plans ?? [])
+      const params = new URLSearchParams({
+        page: String(page),
+        search: debouncedSearch,
+        status: statusFilter,
+        plan: planFilter,
+      })
+      const res = await fetch(`/api/users?${params.toString()}`)
+      const data = await res.json()
+      if (myReq !== reqId.current) return // a newer request superseded this one
+      setUsers(data.users ?? [])
+      if (data.pagination) setPagination(data.pagination)
     } catch {
-      // silently fail, show empty state
+      if (myReq === reqId.current) setUsers([])
     } finally {
-      setLoading(false)
+      if (myReq === reqId.current) setLoading(false)
     }
-  }, [])
+  }, [page, debouncedSearch, statusFilter, planFilter])
 
   useEffect(() => {
     fetchUsers()
   }, [fetchUsers])
-
-  // Filter users
-  const filtered = users.filter((u) => {
-    const matchSearch =
-      !search ||
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase())
-    const matchStatus = !statusFilter || statusFilter === 'ALL' || u.status === statusFilter
-    const matchPlan =
-      !planFilter ||
-      planFilter === 'ALL' ||
-      (planFilter === 'NONE' ? !u.planId : u.planId === planFilter)
-    return matchSearch && matchStatus && matchPlan
-  })
-
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   async function handleStatusChange(userId: string, status: string) {
     setActionLoading(userId + '_status')
@@ -106,7 +122,9 @@ export function UserTable({ search, statusFilter, planFilter }: UserTableProps) 
     }
   }
 
-  if (loading) {
+  const { page: curPage, pageSize, total, totalPages } = pagination
+
+  if (loading && users.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <svg className="animate-spin h-8 w-8 text-blue-500" viewBox="0 0 24 24" fill="none">
@@ -133,17 +151,17 @@ export function UserTable({ search, statusFilter, planFilter }: UserTableProps) 
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {paginated.length === 0 ? (
+            {users.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-12 text-center text-gray-400">
                   No users found.
                 </td>
               </tr>
             ) : (
-              paginated.map((user, idx) => (
+              users.map((user, idx) => (
                 <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 text-gray-400">
-                    {(page - 1) * PAGE_SIZE + idx + 1}
+                    {(curPage - 1) * pageSize + idx + 1}
                   </td>
                   <td className="px-4 py-3">
                     <div>
@@ -221,33 +239,23 @@ export function UserTable({ search, statusFilter, planFilter }: UserTableProps) 
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
           <p className="text-sm text-gray-500">
-            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of{' '}
-            {filtered.length} users
+            Showing {total === 0 ? 0 : (curPage - 1) * pageSize + 1}–
+            {Math.min(curPage * pageSize, total)} of {total} users
           </p>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
+              disabled={curPage === 1}
               className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 transition"
             >
               <ChevronLeft size={16} />
             </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPage(p)}
-                className={`w-8 h-8 rounded text-sm font-medium transition ${
-                  p === page
-                    ? 'bg-blue-500 text-white'
-                    : 'hover:bg-gray-100 text-gray-600'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
+            <span className="text-sm text-gray-600 px-2">
+              Page {curPage} of {totalPages}
+            </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
+              disabled={curPage >= totalPages}
               className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 transition"
             >
               <ChevronRight size={16} />

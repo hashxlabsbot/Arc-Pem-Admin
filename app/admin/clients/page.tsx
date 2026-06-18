@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building2, Mail, Plus, Search, Pencil, Trash2, Eye } from 'lucide-react'
+import { usePaginatedList } from '@/lib/use-paginated-list'
+import { Pagination } from '@/components/admin/Pagination'
 
 interface Client {
   id: string
@@ -42,8 +44,6 @@ const emptyForm = {
 
 export default function ClientsPage() {
   const router = useRouter()
-  const [clients, setClients] = useState<Client[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [planFilter, setPlanFilter] = useState('all')
@@ -54,20 +54,19 @@ export default function ClientsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  async function fetchClients() {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/clients')
-      const data = await res.json()
-      setClients(data.clients || [])
-    } catch {
-      setError('Failed to load clients')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchClients() }, [])
+  const {
+    items: clients,
+    pagination,
+    stats,
+    loading,
+    setPage,
+    refresh: fetchClients,
+  } = usePaginatedList<Client>({
+    url: '/api/clients',
+    itemsKey: 'clients',
+    search,
+    filters: { status: statusFilter, plan: planFilter },
+  })
 
   function openAdd() {
     setEditClient(null)
@@ -122,18 +121,8 @@ export default function ClientsPage() {
     }
   }
 
-  const filtered = clients.filter((c) => {
-    const matchSearch =
-      !search ||
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.email.toLowerCase().includes(search.toLowerCase()) ||
-      (c.company || '').toLowerCase().includes(search.toLowerCase())
-    const matchStatus = statusFilter === 'all' || c.status === statusFilter
-    const matchPlan = planFilter === 'all' || c.plan === planFilter
-    return matchSearch && matchStatus && matchPlan
-  })
-
-  const activeCount = clients.filter((c) => c.status === 'active').length
+  const totalCount = stats.total ?? 0
+  const activeCount = stats.active ?? 0
 
   return (
     <div className="space-y-5">
@@ -145,7 +134,7 @@ export default function ClientsPage() {
             <Building2 size={18} />
           </div>
           <div>
-            <p className="text-2xl font-black text-gray-900 tabular-nums leading-none">{clients.length}</p>
+            <p className="text-2xl font-black text-gray-900 tabular-nums leading-none">{totalCount}</p>
             <p className="text-xs text-gray-500 mt-0.5">Total Clients</p>
           </div>
         </div>
@@ -213,7 +202,7 @@ export default function ClientsPage() {
         <div className="h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-600" />
         {loading ? (
           <div className="py-16 text-center text-gray-400">Loading...</div>
-        ) : filtered.length === 0 ? (
+        ) : clients.length === 0 ? (
           <div className="py-16 text-center text-gray-400">No clients found.</div>
         ) : (
           <div className="overflow-x-auto">
@@ -232,7 +221,7 @@ export default function ClientsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((c) => (
+                {clients.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2.5">
@@ -291,6 +280,9 @@ export default function ClientsPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {!loading && clients.length > 0 && (
+          <Pagination pagination={pagination} onPageChange={setPage} label="client" />
         )}
       </div>
 
