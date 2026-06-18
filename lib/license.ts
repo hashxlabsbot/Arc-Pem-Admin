@@ -20,12 +20,18 @@ function getPrivateKey(): string {
 }
 
 export interface LicensePayload {
-  client:    string
-  email:     string
-  seats:     number
-  expiry:    string   // YYYY-MM-DD
-  machineId: string   // pipe-separated for multi-seat: "ID1|ID2"
-  issued:    string   // YYYY-MM-DD
+  client:      string
+  email:       string
+  // Plan identity — read by Arc PEM to determine feature access and limits.
+  plan:        string    // e.g. "Professional"
+  planPeriod:  string    // e.g. "monthly" | "yearly"
+  features:    string[]  // feature list from the subscribed plan
+  maxProjects: number
+  maxUsers:    number
+  seats:       number
+  expiry:      string    // YYYY-MM-DD
+  machineId:   string    // pipe-separated for multi-seat: "ID1|ID2"
+  issued:      string    // YYYY-MM-DD
 }
 
 /**
@@ -92,13 +98,17 @@ export function buildLicenseFile(key: string, payload: LicensePayload): string {
   const machines = payload.machineId.split('|').map((m, i) => `  Machine ${i + 1}: ${m.trim()}`).join('\n')
   return [
     '-----BEGIN ARC PEM LICENSE-----',
-    `Product   : ARC PEM`,
-    `Client    : ${payload.client}`,
-    `Email     : ${payload.email}`,
-    `Seats     : ${payload.seats}`,
-    `Issued    : ${payload.issued}`,
-    `Expires   : ${payload.expiry}`,
-    `Machines  :`,
+    `Product     : ARC PEM`,
+    `Client      : ${payload.client}`,
+    `Email       : ${payload.email}`,
+    `Plan        : ${payload.plan}`,
+    `Period      : ${payload.planPeriod}`,
+    `Max Projects: ${payload.maxProjects}`,
+    `Max Users   : ${payload.maxUsers}`,
+    `Seats       : ${payload.seats}`,
+    `Issued      : ${payload.issued}`,
+    `Expires     : ${payload.expiry}`,
+    `Machines    :`,
     machines,
     '',
     key,

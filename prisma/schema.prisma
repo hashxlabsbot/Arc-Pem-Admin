@@ -62,21 +62,22 @@ model Plan {
 }
 
 model Client {
-  id            String       @id @default(cuid())
-  name          String
-  email         String       @unique
-  phone         String?
-  company       String?
-  address       String?
-  plan          String       @default("standard")
-  notes         String?
-  status        String       @default("active")
-  paymentStatus String       @default("pending")
-  licenses      License[]
-  apiKeys       ApiKey[]
-  clientNotes   ClientNote[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id              String           @id @default(cuid())
+  name            String
+  email           String           @unique
+  phone           String?
+  company         String?
+  address         String?
+  plan            String           @default("standard")
+  notes           String?
+  status          String           @default("active")
+  paymentStatus   String           @default("pending")
+  licenses        License[]
+  apiKeys         ApiKey[]
+  clientNotes     ClientNote[]
+  licenseRequests LicenseRequest[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([status, createdAt])
   @@index([createdAt])
@@ -210,6 +211,31 @@ model SellerProfile {
   invoicePrefix String   @default("ARC")
   bankDetails   String?
   updatedAt     DateTime @updatedAt
+}
+
+// Machine ID requests submitted by users from the customer dashboard.
+// Admin reviews and issues a signed license once verified.
+model LicenseRequest {
+  id        String   @id @default(cuid())
+  // Linked to an existing Client once the request is matched or approved.
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  // Optional: the User record if the requester is a registered subscriber.
+  userId    String?
+  name      String
+  email     String
+  machineId String
+  notes     String?
+  // pending | approved | rejected
+  status    String   @default("pending")
+  // Populated once admin approves and a License row is created.
+  licenseId String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@index([clientId])
 }
 
 // Immutable GST tax invoice generated when a payment is approved.

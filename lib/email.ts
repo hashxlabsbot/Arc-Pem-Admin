@@ -130,6 +130,96 @@ export async function sendWelcomeEmail({
   `)
 }
 
+export async function sendLicenseEmail({
+  to, name, planName, expiry, licenseFile,
+}: {
+  to: string
+  name: string
+  planName: string
+  expiry: string
+  licenseFile: { fileName: string; content: string } // base64 content
+}) {
+  const dashUrl = process.env.WEB_URL ?? 'http://localhost:3001'
+  await sendMail(
+    to,
+    name,
+    `Your ARC PEM license key is ready`,
+    `
+    <!DOCTYPE html><html>
+    <body style="margin:0;padding:0;background:#f8fafc;font-family:'Segoe UI',Arial,sans-serif;">
+    <div style="max-width:540px;margin:40px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.07);">
+      <div style="background:linear-gradient(135deg,#1e3a8a,#3b82f6);padding:32px 36px;">
+        <h1 style="color:white;font-size:22px;font-weight:700;margin:0 0 6px;">Your License is Ready</h1>
+        <p style="color:rgba(255,255,255,0.8);font-size:14px;margin:0;">ARC PEM — <strong>${planName}</strong> plan</p>
+      </div>
+      <div style="padding:32px 36px;">
+        <p style="font-size:15px;color:#1e293b;margin:0 0 20px;">Hi <strong>${name}</strong>,</p>
+        <p style="font-size:14px;color:#475569;margin:0 0 20px;line-height:1.6;">
+          Your machine-locked license key for the <strong>${planName}</strong> plan has been generated and is attached to this email as <strong>${licenseFile.fileName}</strong>.
+        </p>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:16px 18px;margin-bottom:24px;">
+          <p style="font-size:13px;font-weight:700;color:#1e40af;margin:0 0 8px;">How to activate</p>
+          <ol style="margin:0;padding-left:18px;font-size:13px;color:#1e3a8a;line-height:1.8;">
+            <li>Save the attached <code style="background:#dbeafe;padding:1px 5px;border-radius:4px;">.lic</code> file to your computer</li>
+            <li>Open ARC PEM and go to <strong>Settings → License</strong></li>
+            <li>Click <strong>Activate</strong> and select the <code style="background:#dbeafe;padding:1px 5px;border-radius:4px;">.lic</code> file</li>
+          </ol>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-bottom:24px;">
+          <p style="font-size:12px;color:#64748b;margin:0;">
+            <strong>Valid until:</strong> ${expiry}<br/>
+            This license is locked to the machine you submitted. Contact support to transfer or extend.
+          </p>
+        </div>
+        <a href="${dashUrl}/dashboard"
+           style="display:inline-block;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:white;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:700;font-size:14px;">
+          Go to Dashboard →
+        </a>
+      </div>
+      <div style="background:#f8fafc;border-top:1px solid #f1f5f9;padding:20px 36px;text-align:center;">
+        <p style="font-size:12px;color:#94a3b8;margin:0;">© 2026 ARCPEM. All rights reserved.<br/>Reply to this email if you need help activating your license.</p>
+      </div>
+    </div>
+    </body></html>
+  `,
+    [{ name: licenseFile.fileName, content: licenseFile.content }],
+  )
+}
+
+export async function sendLicenseRequestRejectionEmail({
+  to, name, reason,
+}: { to: string; name: string; reason?: string }) {
+  await sendMail(
+    to,
+    name,
+    'Your license request could not be processed',
+    `
+    <!DOCTYPE html><html>
+    <body style="margin:0;padding:0;background:#f8fafc;font-family:'Segoe UI',Arial,sans-serif;">
+    <div style="max-width:540px;margin:40px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.07);">
+      <div style="background:linear-gradient(135deg,#7f1d1d,#ef4444);padding:32px 36px;">
+        <h1 style="color:white;font-size:22px;font-weight:700;margin:0 0 6px;">License Request Declined</h1>
+        <p style="color:rgba(255,255,255,0.8);font-size:14px;margin:0;">We could not process your machine ID request.</p>
+      </div>
+      <div style="padding:32px 36px;">
+        <p style="font-size:15px;color:#1e293b;margin:0 0 20px;">Hi <strong>${name}</strong>,</p>
+        <p style="font-size:14px;color:#475569;margin:0 0 20px;line-height:1.6;">
+          Unfortunately we were unable to generate a license for your submitted machine ID.
+          ${reason ? `<br/><br/><strong>Reason:</strong> ${reason}` : ''}
+        </p>
+        <p style="font-size:14px;color:#475569;margin:0;line-height:1.6;">
+          Please contact our support team with your machine ID and subscription details and we will resolve this for you.
+        </p>
+      </div>
+      <div style="background:#f8fafc;border-top:1px solid #f1f5f9;padding:20px 36px;text-align:center;">
+        <p style="font-size:12px;color:#94a3b8;margin:0;">© 2026 ARCPEM. All rights reserved.</p>
+      </div>
+    </div>
+    </body></html>
+  `,
+  )
+}
+
 export async function sendRejectionEmail({
   to, name, planName, utr, reason,
 }: { to: string; name: string; planName: string; utr: string; reason?: string }) {

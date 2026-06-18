@@ -29,12 +29,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
+    // Fetch the subscriber's plan details so the license carries feature/limit metadata.
+    // Look up the User by email (the client was mirrored from the User on payment approval).
+    const user = await db.user.findUnique({
+      where:   { email: client.email },
+      include: { plan: true },
+    })
+    const plan = user?.plan
+
     const expiryDate = expiry.split('T')[0]
     const licenseKey = generateLicenseKey({
-      client: client.name,
-      email: client.email,
-      seats: seatCount,
-      expiry: expiryDate,
+      client:      client.name,
+      email:       client.email,
+      plan:        plan?.name        ?? client.plan,
+      planPeriod:  plan?.period      ?? 'monthly',
+      features:    plan?.features    ? JSON.parse(plan.features) : [],
+      maxProjects: plan?.maxProjects ?? 10,
+      maxUsers:    plan?.maxUsers    ?? 1,
+      seats:       seatCount,
+      expiry:      expiryDate,
       machineId,
     })
 

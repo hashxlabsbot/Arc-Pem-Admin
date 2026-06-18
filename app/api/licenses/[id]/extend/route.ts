@@ -28,7 +28,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
 
     const existing = await db.license.findUnique({
-      where: { id: params.id },
+      where:   { id: params.id },
       include: { client: true },
     })
 
@@ -36,13 +36,28 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: 'License not found' }, { status: 404 })
     }
 
+    // Re-fetch plan details so the extended license carries up-to-date metadata.
+    const user = await db.user.findUnique({
+      where:   { email: existing.client.email },
+      include: { plan: true },
+    })
+    const plan = user?.plan
+    const features: string[] = plan?.features
+      ? (() => { try { return JSON.parse(plan.features) } catch { return [] } })()
+      : []
+
     const expiryDate = expiry.split('T')[0]
     const licenseKey = generateLicenseKey({
-      client: existing.client.name,
-      email: existing.client.email,
-      seats: existing.seats,
-      expiry: expiryDate,
-      machineId: existing.machineId,
+      client:      existing.client.name,
+      email:       existing.client.email,
+      plan:        plan?.name        ?? existing.client.plan,
+      planPeriod:  plan?.period      ?? 'monthly',
+      features,
+      maxProjects: plan?.maxProjects ?? 10,
+      maxUsers:    plan?.maxUsers    ?? 1,
+      seats:       existing.seats,
+      expiry:      expiryDate,
+      machineId:   existing.machineId,
     })
 
     const newFileName = licenseFileName(existing.client.name, expiryDate)
