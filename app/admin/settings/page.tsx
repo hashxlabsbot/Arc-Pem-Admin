@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Info, Database, ShieldCheck, Users, Key, Building2 } from 'lucide-react'
+import { SellerProfileForm } from '@/components/admin/SellerProfileForm'
 
 interface Stats {
   totalUsers?: number
@@ -41,6 +42,9 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-5">
+
+      {/* Seller / GST details for invoices */}
+      <SellerProfileForm />
 
       {/* About */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

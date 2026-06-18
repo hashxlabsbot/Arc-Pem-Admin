@@ -22,6 +22,8 @@ model User {
   tokenVersion Int      @default(0)
   planId       String?
   plan         Plan?    @relation(fields: [planId], references: [id])
+  billingProfile BillingProfile?
+  invoices     Invoice[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -153,4 +155,85 @@ model ActivityLog {
   // Fast-growing table: index the columns the activity feed filters/sorts on.
   @@index([createdAt])
   @@index([action, createdAt])
+}
+
+// Buyer's GST/billing details, collected at plan purchase. One per user.
+model BillingProfile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  legalName    String
+  gstin        String?
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  // 2-digit GST state code (e.g. "27" for Maharashtra). Drives intra/inter-state tax split.
+  stateCode    String
+  pincode      String
+  country      String   @default("India")
+  phone        String?
+  email        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Single-row seller (our company) GST profile, editable from admin Settings.
+model SellerProfile {
+  id            String   @id @default(cuid())
+  legalName     String
+  gstin         String
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  state         String
+  stateCode     String
+  pincode       String
+  email         String?
+  phone         String?
+  // SAC code for SaaS / IT services; tax rate applied to plan price.
+  hsnSac        String   @default("998314")
+  taxRate       Float    @default(18)
+  invoicePrefix String   @default("ARC")
+  bankDetails   String?
+  updatedAt     DateTime @updatedAt
+}
+
+// Immutable GST tax invoice generated when a payment is approved.
+model Invoice {
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Links the approved PendingPayment that triggered this invoice (one invoice per payment).
+  paymentId     String?  @unique
+  planName      String
+
+  // Snapshot of buyer details at issue time (so later profile edits never alter past invoices).
+  buyerName      String
+  buyerGstin     String?
+  buyerAddress   String
+  buyerStateCode String
+
+  // Snapshot of seller details at issue time.
+  sellerName      String
+  sellerGstin     String
+  sellerAddress   String
+  sellerStateCode String
+
+  placeOfSupply String
+  hsnSac        String
+  taxRate       Float
+  taxableAmount Float
+  cgst          Float    @default(0)
+  sgst          Float    @default(0)
+  igst          Float    @default(0)
+  total         Float
+  currency      String   @default("INR")
+  // Rendered PDF bytes, served on download.
+  pdf           Bytes
+  issuedAt      DateTime @default(now())
+
+  @@index([userId])
+  @@index([issuedAt])
 }

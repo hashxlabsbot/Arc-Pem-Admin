@@ -18,12 +18,22 @@ export default async function PaymentsPage() {
   })
   const userMap = Object.fromEntries(users.map(u => [u.id, u]))
 
+  // Map each payment to its generated invoice (if any) so the table can offer a download.
+  const invoices = await db.invoice.findMany({
+    where: { paymentId: { in: payments.map(p => p.id) } },
+    select: { id: true, paymentId: true },
+  })
+  const invoiceByPayment = Object.fromEntries(
+    invoices.filter(i => i.paymentId).map(i => [i.paymentId as string, i.id])
+  )
+
   const rows = payments.map(p => ({
     ...p,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
     userName:  userMap[p.userId]?.name  ?? '—',
     userEmail: userMap[p.userId]?.email ?? '—',
+    invoiceId: invoiceByPayment[p.id] ?? null,
   }))
 
   const pending  = rows.filter(r => r.status === 'pending').length

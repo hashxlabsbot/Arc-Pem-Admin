@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle, XCircle, Clock, Loader2, AlertCircle, RotateCcw } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, Loader2, AlertCircle, RotateCcw, FileText } from 'lucide-react'
 
 type Row = {
   id: string
@@ -12,6 +12,7 @@ type Row = {
   utr: string
   status: string
   createdAt: string
+  invoiceId: string | null
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -51,11 +52,13 @@ export function PaymentsTable({ rows: initial }: { rows: Row[] }) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setRows(r => r.map(row => row.id === id ? { ...row, status: 'approved' } : row))
+      setRows(r => r.map(row => row.id === id ? { ...row, status: 'approved', invoiceId: data.invoiceId ?? null } : row))
       if (data.emailSent === false) {
         showToast(`Plan activated but email failed: ${data.emailError}`, false)
+      } else if (data.invoiceGenerated === false) {
+        showToast(`Approved & emailed, but invoice skipped: ${data.invoiceReason ?? 'missing details'}`, false)
       } else {
-        showToast('Payment approved — confirmation email sent to user.', true)
+        showToast('Payment approved — invoice generated and emailed to user.', true)
       }
     } catch (e: unknown) {
       showToast((e as Error).message ?? 'Failed', false)
@@ -216,14 +219,25 @@ export function PaymentsTable({ rows: initial }: { rows: Row[] }) {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => reset(row.id)}
-                      disabled={!!loading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 text-xs font-bold disabled:opacity-50 transition-colors"
-                    >
-                      {loading === row.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
-                      Reset
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {row.status === 'approved' && row.invoiceId && (
+                        <a
+                          href={`/api/invoices/${row.invoiceId}/download`}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 text-xs font-bold transition-colors"
+                        >
+                          <FileText size={12} />
+                          Invoice
+                        </a>
+                      )}
+                      <button
+                        onClick={() => reset(row.id)}
+                        disabled={!!loading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 text-xs font-bold disabled:opacity-50 transition-colors"
+                      >
+                        {loading === row.id ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                        Reset
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>

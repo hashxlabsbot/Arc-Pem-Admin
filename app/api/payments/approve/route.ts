@@ -4,6 +4,10 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { sendApprovalEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity'
+import { generateInvoiceForPayment } from '@/lib/invoice'
+
+// pdf-lib + Prisma Bytes need the Node.js runtime (not Edge).
+export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -37,14 +41,41 @@ export async function POST(req: NextRequest) {
 
   await logActivity('APPROVE', 'Payment', paymentId, `Approved ${payment.planName} plan for user ${payment.userId}`)
 
-  // Send activation email — awaited so errors surface
+  // Generate the GST invoice. Never blocks approval — on missing details / errors
+  // we report it and let the admin generate later once billing data exists.
+  let invoiceGenerated = false
+  let invoiceReason: string | undefined
+  let invoiceId: string | undefined
+  let invoiceAttachment: { fileName: string; pdf: Uint8Array } | undefined
+  try {
+    const result = await generateInvoiceForPayment({
+      id:       payment.id,
+      userId:   payment.userId,
+      planName: payment.planName,
+      amount:   payment.amount,
+    })
+    if (result.ok) {
+      invoiceGenerated = true
+      invoiceId = result.invoiceId
+      invoiceAttachment = { fileName: result.fileName, pdf: result.pdf }
+      await logActivity('INVOICE_GENERATED', 'Invoice', result.invoiceId, `Invoice ${result.invoiceNumber} for user ${payment.userId}`)
+    } else {
+      invoiceReason = result.reason
+    }
+  } catch (err) {
+    console.error('[invoice] generation failed:', err)
+    invoiceReason = err instanceof Error ? err.message : String(err)
+  }
+
+  // Send activation email (with invoice attached when available) — awaited so errors surface
   try {
     await sendApprovalEmail({
       to:       user.email,
       name:     user.name,
       planName: payment.planName,
+      invoice:  invoiceAttachment,
     })
-    return NextResponse.json({ success: true, emailSent: true })
+    return NextResponse.json({ success: true, emailSent: true, invoiceGenerated, invoiceReason, invoiceId })
   } catch (err) {
     // Plan is already activated — just report the email failure
     console.error('[email] approval failed:', err)
@@ -53,6 +84,9 @@ export async function POST(req: NextRequest) {
       success:   true,
       emailSent: false,
       emailError: message,
+      invoiceGenerated,
+      invoiceReason,
+      invoiceId,
     })
   }
 }

@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { sendWelcomeEmail } from '@/lib/email'
 import { validatePassword } from '@/lib/password'
 import { checkRateLimit, recordFailure } from '@/lib/rate-limit'
+import { validateBillingProfile } from '@/lib/invoice'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -20,7 +21,7 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { name, email, password, planId, planName } = body
+    const { name, email, password, planId, planName, billing } = body
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -86,6 +87,15 @@ export async function POST(req: NextRequest) {
       if (match) resolvedPlanId = match.id
     }
 
+    // Validate optional GST/billing details captured at purchase before creating anything.
+    let billingData: ReturnType<typeof validateBillingProfile> | null = null
+    if (billing) {
+      billingData = validateBillingProfile(billing)
+      if (!billingData.ok) {
+        return NextResponse.json({ error: billingData.error }, { status: 400, headers: CORS_HEADERS })
+      }
+    }
+
     const hashed = await bcrypt.hash(password, 10)
 
     const user = await db.user.create({
@@ -98,6 +108,17 @@ export async function POST(req: NextRequest) {
         ...(resolvedPlanId ? { planId: resolvedPlanId } : {}),
       },
     })
+
+    // Persist GST/billing details captured at purchase, if provided.
+    if (billingData?.ok) {
+      await db.billingProfile.create({
+        data: {
+          userId: user.id,
+          ...billingData.data,
+          email: billingData.data.email ?? normalizedEmail,
+        },
+      })
+    }
 
     // Send welcome email — fire-and-forget so a mail failure never blocks signup
     if (process.env.BREVO_API_KEY) {

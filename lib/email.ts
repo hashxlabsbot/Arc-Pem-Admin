@@ -1,7 +1,16 @@
 const BREVO_API = 'https://api.brevo.com/v3/smtp/email'
 const FROM = { name: 'ARC PEM', email: process.env.BREVO_SENDER_EMAIL ?? 'vashisth0052@gmail.com' }
 
-async function sendMail(to: string, toName: string, subject: string, html: string) {
+// Brevo accepts attachments as base64 content + filename.
+export interface MailAttachment { name: string; content: string }
+
+async function sendMail(
+  to: string,
+  toName: string,
+  subject: string,
+  html: string,
+  attachments?: MailAttachment[],
+) {
   const res = await fetch(BREVO_API, {
     method: 'POST',
     headers: {
@@ -13,6 +22,7 @@ async function sendMail(to: string, toName: string, subject: string, html: strin
       to:          [{ email: to, name: toName }],
       subject,
       htmlContent: html,
+      ...(attachments && attachments.length ? { attachment: attachments } : {}),
     }),
   })
 
@@ -23,9 +33,19 @@ async function sendMail(to: string, toName: string, subject: string, html: strin
 }
 
 export async function sendApprovalEmail({
-  to, name, planName,
-}: { to: string; name: string; planName: string }) {
+  to, name, planName, invoice,
+}: {
+  to: string; name: string; planName: string
+  // Optional GST invoice PDF to attach to the activation email.
+  invoice?: { fileName: string; pdf: Uint8Array }
+}) {
   const dashUrl = process.env.WEB_URL ?? 'http://localhost:3001'
+  const attachments: MailAttachment[] | undefined = invoice
+    ? [{ name: invoice.fileName, content: Buffer.from(invoice.pdf).toString('base64') }]
+    : undefined
+  const invoiceNote = invoice
+    ? `<p style="font-size:13px;color:#475569;margin:0 0 24px;line-height:1.6;">Your GST tax invoice is attached to this email as a PDF.</p>`
+    : ''
 
   await sendMail(to, name, `Your ${planName} plan is now active`, `
     <!DOCTYPE html><html>
@@ -40,6 +60,7 @@ export async function sendApprovalEmail({
         <p style="font-size:14px;color:#475569;margin:0 0 24px;line-height:1.6;">
           Your payment has been verified and your <strong>${planName}</strong> plan is now active.
         </p>
+        ${invoiceNote}
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px;margin-bottom:24px;">
           <p style="font-size:13px;color:#166534;margin:0;line-height:1.7;">
             <strong>Next steps:</strong><br/>
@@ -57,7 +78,7 @@ export async function sendApprovalEmail({
       </div>
     </div>
     </body></html>
-  `)
+  `, attachments)
 }
 
 export async function sendWelcomeEmail({
