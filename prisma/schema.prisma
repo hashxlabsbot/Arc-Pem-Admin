@@ -18,6 +18,9 @@ model User {
   password     String
   role         String   @default("USER")
   status       String   @default("ACTIVE")
+  // Marks users acquired during the early-access launch window (e.g. the June 20
+  // event). The product ships later; this flags the cohort to onboard at go-live.
+  earlyAccess  Boolean  @default(false)
   // Bumped to invalidate all existing JWTs for this user (logout-everywhere / suspend).
   tokenVersion Int      @default(0)
   planId       String?
@@ -31,6 +34,16 @@ model User {
   @@index([role, status, createdAt])
   @@index([planId])
   @@index([createdAt])
+  // Admin counts/filters the early-access launch cohort.
+  @@index([earlyAccess])
+}
+
+// Generic key/value app configuration, editable from admin Settings. Used for
+// runtime toggles such as `earlyAccessOpen` (gates public registration at launch).
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 model Plan {

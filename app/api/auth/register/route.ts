@@ -5,6 +5,7 @@ import { sendWelcomeEmail } from '@/lib/email'
 import { validatePassword } from '@/lib/password'
 import { checkRateLimit, recordFailure } from '@/lib/rate-limit'
 import { validateBillingProfile } from '@/lib/invoice'
+import { isEarlyAccessOpen } from '@/lib/settings'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -98,6 +99,11 @@ export async function POST(req: NextRequest) {
 
     const hashed = await bcrypt.hash(password, 10)
 
+    // When early-access mode is on, buyers pay now but their license key is held
+    // until the admin ships the product. Off = normal flow. Either way the account
+    // is created and they get dashboard access immediately.
+    const earlyAccess = await isEarlyAccessOpen()
+
     const user = await db.user.create({
       data: {
         name,
@@ -105,6 +111,7 @@ export async function POST(req: NextRequest) {
         password: hashed,
         role: 'USER',
         status: 'ACTIVE',
+        earlyAccess,
         ...(resolvedPlanId ? { planId: resolvedPlanId } : {}),
       },
     })
