@@ -41,6 +41,45 @@ export async function POST(req: NextRequest) {
 
   await logActivity('APPROVE', 'Payment', paymentId, `Approved ${payment.planName} plan for user ${payment.userId}`)
 
+  // Mirror the paying subscriber into the Clients (licensing) side so they can be
+  // issued license keys. Upsert by email; never blocks approval on failure.
+  let clientId: string | undefined
+  try {
+    const billing = await db.billingProfile.findUnique({ where: { userId: payment.userId } })
+    const address = billing
+      ? [billing.addressLine1, billing.addressLine2, `${billing.city}, ${billing.state} - ${billing.pincode}`, billing.country]
+          .filter(Boolean)
+          .join(', ')
+      : undefined
+    const planSlug = payment.planName.toLowerCase()
+
+    const existing = await db.client.findUnique({ where: { email: user.email }, select: { id: true } })
+    const client = await db.client.upsert({
+      where: { email: user.email },
+      create: {
+        name:          user.name,
+        email:         user.email,
+        company:       billing?.legalName ?? null,
+        address:       address ?? null,
+        plan:          planSlug,
+        status:        'active',
+        paymentStatus: 'paid',
+      },
+      update: {
+        plan:          planSlug,
+        status:        'active',
+        paymentStatus: 'paid',
+        // Fill company/address from billing only when we have them.
+        ...(billing?.legalName ? { company: billing.legalName } : {}),
+        ...(address ? { address } : {}),
+      },
+    })
+    clientId = client.id
+    await logActivity(existing ? 'UPDATE' : 'CREATE', 'Client', client.id, `${existing ? 'Updated' : 'Created'} client from approved payment for ${user.email}`)
+  } catch (err) {
+    console.error('[client] upsert on approval failed:', err)
+  }
+
   // Generate the GST invoice. Never blocks approval — on missing details / errors
   // we report it and let the admin generate later once billing data exists.
   let invoiceGenerated = false
@@ -75,7 +114,7 @@ export async function POST(req: NextRequest) {
       planName: payment.planName,
       invoice:  invoiceAttachment,
     })
-    return NextResponse.json({ success: true, emailSent: true, invoiceGenerated, invoiceReason, invoiceId })
+    return NextResponse.json({ success: true, emailSent: true, invoiceGenerated, invoiceReason, invoiceId, clientId })
   } catch (err) {
     // Plan is already activated — just report the email failure
     console.error('[email] approval failed:', err)
@@ -87,6 +126,7 @@ export async function POST(req: NextRequest) {
       invoiceGenerated,
       invoiceReason,
       invoiceId,
+      clientId,
     })
   }
 }
