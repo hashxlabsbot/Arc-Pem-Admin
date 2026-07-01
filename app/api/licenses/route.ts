@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       await Promise.all([
         db.license.findMany({
           where,
-          include: { client: { select: { name: true, email: true } } },
+          include: { client: { select: { name: true, email: true, paymentStatus: true } } },
           orderBy: { createdAt: 'desc' },
           skip: (page - 1) * pageSize,
           take: pageSize,

@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { sendApprovalEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity'
 import { generateInvoiceForPayment } from '@/lib/invoice'
+import { planExpiryAfterPayment } from '@/lib/pricing'
 
 // pdf-lib + Prisma Bytes need the Node.js runtime (not Edge).
 export const runtime = 'nodejs'
@@ -27,11 +28,12 @@ export async function POST(req: NextRequest) {
   const user = await db.user.findUnique({ where: { id: payment.userId } })
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  // Activate the plan and mark payment approved atomically
+  // Activate the plan (with a one-year license term) and mark payment approved
+  // atomically. Renewal-safe: extends from any remaining term.
   await db.$transaction([
     db.user.update({
       where: { id: payment.userId },
-      data:  { planId: payment.planId },
+      data:  { planId: payment.planId, planExpiresAt: planExpiryAfterPayment(user.planExpiresAt) },
     }),
     db.pendingPayment.update({
       where: { id: paymentId },

@@ -25,6 +25,10 @@ model User {
   tokenVersion Int      @default(0)
   planId       String?
   plan         Plan?    @relation(fields: [planId], references: [id])
+  // End of the current one-year license term. Set when a paid plan is activated
+  // (Razorpay webhook / manual approval) to now + 1 year; null = no active paid
+  // license. Drives "Expires on…" on the customer dashboard and renewal reminders.
+  planExpiresAt DateTime?
   billingProfile BillingProfile?
   invoices     Invoice[]
   createdAt    DateTime @default(now())

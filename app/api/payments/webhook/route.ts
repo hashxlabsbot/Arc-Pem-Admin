@@ -30,6 +30,7 @@ import { db } from '@/lib/db'
 import { sendApprovalEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity'
 import { generateInvoiceForPayment } from '@/lib/invoice'
+import { annualPrice, planExpiryAfterPayment } from '@/lib/pricing'
 
 export const runtime = 'nodejs'
 
@@ -107,8 +108,10 @@ export async function POST(req: NextRequest) {
     console.error('[webhook] plan not found', { planId })
     return NextResponse.json({ received: true })
   }
-  if (amountPaise !== Math.round(plan.price * 100)) {
-    console.warn('[webhook] amount mismatch', { amountPaise, expected: Math.round(plan.price * 100) })
+  // Sold as a one-year license: the website charges 12× the stored monthly base.
+  const yearly = annualPrice(plan.price)
+  if (amountPaise !== Math.round(yearly * 100)) {
+    console.warn('[webhook] amount mismatch', { amountPaise, expected: Math.round(yearly * 100) })
     return NextResponse.json({ received: true })
   }
 
@@ -132,7 +135,7 @@ export async function POST(req: NextRequest) {
           userId,
           planId:   plan.id,
           planName: plan.name || planName,
-          amount:   plan.price,
+          amount:   yearly,
           utr:      paymentId,
           status:   'approved',
         },
@@ -140,10 +143,15 @@ export async function POST(req: NextRequest) {
       paymentDbId = created.id
     }
 
-    // Ensure user.planId is set (website may not have processed yet).
-    if (!user.planId || user.planId !== plan.id) {
-      await db.user.update({ where: { id: userId }, data: { planId: plan.id } })
-    }
+    // Activate the plan and (re)set the one-year license term. The website may
+    // have set planId already but cannot set planExpiresAt, so always write it.
+    await db.user.update({
+      where: { id: userId },
+      data: {
+        planId: plan.id,
+        planExpiresAt: planExpiryAfterPayment(user.planExpiresAt),
+      },
+    })
   } catch (err) {
     console.error('[webhook] DB write failed:', err)
     // Return 500 → Razorpay will retry (transient DB issue).
@@ -212,7 +220,7 @@ export async function POST(req: NextRequest) {
       id:       paymentDbId,
       userId,
       planName: plan.name || planName,
-      amount:   plan.price,
+      amount:   yearly,
     })
     if (result.ok) {
       invoiceAttachment = { fileName: result.fileName, pdf: result.pdf }

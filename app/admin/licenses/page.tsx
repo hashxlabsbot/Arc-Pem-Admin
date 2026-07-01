@@ -10,10 +10,11 @@ import { usePaginatedList } from '@/lib/use-paginated-list'
 import { Pagination } from '@/components/admin/Pagination'
 
 interface Client { id: string; name: string; email: string }
+interface Plan { id: string; name: string; maxProjects: number; maxUsers: number; features: string }
 interface License {
   id: string
   clientId: string
-  client: { name: string; email: string }
+  client: { name: string; email: string; paymentStatus: string }
   machineId: string
   seats: number
   issued: string
@@ -43,6 +44,14 @@ function StatusBadge({ expiry, status }: { expiry: string; status: string }) {
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
       Active · {d}d
+    </span>
+  )
+}
+
+function FreeBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 uppercase tracking-wide">
+      Complimentary
     </span>
   )
 }
@@ -83,14 +92,20 @@ function KpiCard({ label, value, gradient, border, iconBg, icon, accent }: {
   )
 }
 
+const FREE_FORM_DEFAULT = { name: '', email: '', phone: '', company: '', planId: '', expiry: '', seats: 1, machineIds: [''], notes: '', createUser: false }
+
 export default function LicensesPage() {
   const [clients, setClients]           = useState<Client[]>([])
+  const [plans, setPlans]               = useState<Plan[]>([])
   const [search, setSearch]             = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showGen, setShowGen]           = useState(false)
+  const [showFree, setShowFree]         = useState(false)
   const [extendTarget, setExtendTarget] = useState<License | null>(null)
   const [viewKey, setViewKey]           = useState<License | null>(null)
   const [genForm, setGenForm]           = useState({ clientId: '', seats: 1, machineIds: [''], expiry: '', notes: '' })
+  const [freeForm, setFreeForm]         = useState(FREE_FORM_DEFAULT)
+  const [freeResult, setFreeResult]     = useState<{ tempPassword?: string; userCreated: boolean; emailSent: boolean } | null>(null)
   const [extendExpiry, setExtendExpiry] = useState('')
   const [submitting, setSubmitting]     = useState(false)
   const [error, setError]               = useState('')
@@ -105,6 +120,48 @@ export default function LicensesPage() {
   }
   function updateMachineId(idx: number, val: string) {
     setGenForm(f => { const ids = [...f.machineIds]; ids[idx] = val; return { ...f, machineIds: ids } })
+  }
+
+  function updateFreeSeats(n: number) {
+    const count = Math.max(1, Math.min(20, n))
+    setFreeForm(f => {
+      const ids = [...f.machineIds]
+      while (ids.length < count) ids.push('')
+      return { ...f, seats: count, machineIds: ids.slice(0, count) }
+    })
+  }
+  function updateFreeMachineId(idx: number, val: string) {
+    setFreeForm(f => { const ids = [...f.machineIds]; ids[idx] = val; return { ...f, machineIds: ids } })
+  }
+
+  function openFreeModal() {
+    setFreeForm(FREE_FORM_DEFAULT)
+    setFreeResult(null)
+    setError('')
+    if (plans.length === 0) {
+      fetch('/api/subscriptions')
+        .then(r => r.json())
+        .then(d => setPlans(d.plans ?? []))
+        .catch(() => {})
+    }
+    setShowFree(true)
+  }
+  function closeFreeModal() { setShowFree(false); setFreeResult(null); setError('') }
+
+  async function issueFree(e: React.FormEvent) {
+    e.preventDefault(); setSubmitting(true); setError('')
+    const emptyIdx = freeForm.machineIds.findIndex(id => !id.trim())
+    if (emptyIdx !== -1) { setError(`Machine ID ${emptyIdx + 1} is required.`); setSubmitting(false); return }
+    const res = await fetch('/api/licenses/issue-free', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...freeForm, machineIds: freeForm.machineIds }),
+    })
+    const data = await res.json()
+    if (!res.ok) { setError(data.error || 'Failed to issue license'); setSubmitting(false); return }
+    setFreeResult({ tempPassword: data.tempPassword, userCreated: data.userCreated, emailSent: data.emailSent })
+    setSubmitting(false)
+    load()
   }
 
   const {
@@ -213,6 +270,10 @@ export default function LicensesPage() {
               </button>
             ))}
           </div>
+          <button onClick={openFreeModal}
+            className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-violet-200 transition-all">
+            <Plus size={15}/> Free License
+          </button>
           <button onClick={() => setShowGen(true)}
             className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md shadow-indigo-200 transition-all">
             <Plus size={15}/> Generate License
@@ -265,12 +326,13 @@ export default function LicensesPage() {
                     {/* Client */}
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold shadow-sm flex-shrink-0">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shadow-sm flex-shrink-0 ${lic.client.paymentStatus === 'free' ? 'bg-gradient-to-br from-violet-500 to-purple-600' : 'bg-gradient-to-br from-indigo-500 to-violet-600'}`}>
                           {lic.client.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                         </div>
                         <div>
                           <p className="font-semibold text-gray-900 text-sm leading-tight">{lic.client.name}</p>
                           <p className="text-xs text-gray-400">{lic.client.email}</p>
+                          {lic.client.paymentStatus === 'free' && <FreeBadge />}
                         </div>
                       </div>
                     </td>
@@ -552,6 +614,205 @@ export default function LicensesPage() {
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* ── Issue Free License Modal ─────────────────────── */}
+      {showFree && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={e => { if (e.target === e.currentTarget) closeFreeModal() }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+
+            <div className="h-1 bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 flex-shrink-0" />
+            <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-md shadow-violet-200">
+                  <KeyRound size={16} className="text-white" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">Issue Free License</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Complimentary license — no payment required</p>
+                </div>
+              </div>
+              <button onClick={closeFreeModal}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                <X size={16}/>
+              </button>
+            </div>
+
+            {/* Success state */}
+            {freeResult ? (
+              <div className="flex-1 px-6 py-6 space-y-4">
+                <div className="flex flex-col items-center gap-3 py-4">
+                  <div className="w-14 h-14 rounded-2xl bg-violet-100 flex items-center justify-center">
+                    <ShieldCheck size={28} className="text-violet-600" />
+                  </div>
+                  <div className="text-center">
+                    <p className="font-bold text-gray-900 text-base">License issued!</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {freeResult.emailSent ? 'Email with .lic file sent to client.' : 'License created — email delivery failed, download manually.'}
+                    </p>
+                  </div>
+                </div>
+                {freeResult.userCreated && freeResult.tempPassword && (
+                  <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
+                    <p className="text-xs font-bold text-violet-700 uppercase tracking-wide mb-2">Dashboard account created</p>
+                    <p className="text-xs text-violet-800 mb-1">Share these credentials with the client:</p>
+                    <div className="bg-white border border-violet-100 rounded-lg px-3 py-2 font-mono text-sm text-violet-900 select-all break-all">
+                      {freeResult.tempPassword}
+                    </div>
+                    <p className="text-[11px] text-violet-500 mt-1.5">This password is also included in the email. Ask client to change it on first login.</p>
+                  </div>
+                )}
+                {freeResult.userCreated && !freeResult.tempPassword && (
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-xs text-blue-700">
+                    Existing user account updated with the new plan and expiry.
+                  </div>
+                )}
+                <button onClick={closeFreeModal} className={BTN_PRIMARY + ' w-full'}>
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-y-auto flex-1 px-6 py-5">
+                  <form onSubmit={issueFree} className="space-y-5" id="free-form">
+
+                    {error && (
+                      <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+                        <X size={14} className="flex-shrink-0"/>{error}
+                      </div>
+                    )}
+
+                    {/* ── Client info ── */}
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="w-5 h-5 rounded-full bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">1</span>
+                        <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Client Details</span>
+                      </div>
+                      <div className="space-y-2.5">
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Name <span className="text-red-500">*</span></label>
+                            <input type="text" value={freeForm.name} onChange={e => setFreeForm(f => ({...f, name: e.target.value}))}
+                              placeholder="Full name" required className={INPUT}/>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Email <span className="text-red-500">*</span></label>
+                            <input type="email" value={freeForm.email} onChange={e => setFreeForm(f => ({...f, email: e.target.value}))}
+                              placeholder="client@example.com" required className={INPUT}/>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Phone</label>
+                            <input type="text" value={freeForm.phone} onChange={e => setFreeForm(f => ({...f, phone: e.target.value}))}
+                              placeholder="Optional" className={INPUT}/>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Company</label>
+                            <input type="text" value={freeForm.company} onChange={e => setFreeForm(f => ({...f, company: e.target.value}))}
+                              placeholder="Optional" className={INPUT}/>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── Plan & Expiry ── */}
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="w-5 h-5 rounded-full bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">2</span>
+                        <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Plan & Expiry</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Plan <span className="text-red-500">*</span></label>
+                          <select value={freeForm.planId} onChange={e => setFreeForm(f => ({...f, planId: e.target.value}))}
+                            required className={INPUT}>
+                            <option value="">Choose plan…</option>
+                            {plans.filter(p => p.id).map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Expiry Date <span className="text-red-500">*</span></label>
+                          <input type="date" value={freeForm.expiry} onChange={e => setFreeForm(f => ({...f, expiry: e.target.value}))}
+                            required className={INPUT}/>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── Seats & Machine IDs ── */}
+                    <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">3</span>
+                          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Seats & Machine IDs</span>
+                        </div>
+                        <span className="text-xs bg-violet-100 text-violet-700 font-semibold px-2 py-0.5 rounded-full">
+                          {freeForm.seats} required
+                        </span>
+                      </div>
+                      <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-white mb-3">
+                        <button type="button" onClick={() => updateFreeSeats(freeForm.seats - 1)}
+                          className="px-3 py-2 text-gray-500 hover:bg-violet-50 hover:text-violet-600 transition-colors font-bold text-lg leading-none flex-shrink-0">−</button>
+                        <div className="flex-1 text-center">
+                          <span className="text-lg font-black text-gray-900">{freeForm.seats}</span>
+                          <span className="text-xs text-gray-400 block leading-none">seat{freeForm.seats !== 1 ? 's' : ''}</span>
+                        </div>
+                        <button type="button" onClick={() => updateFreeSeats(freeForm.seats + 1)}
+                          className="px-3 py-2 text-gray-500 hover:bg-violet-50 hover:text-violet-600 transition-colors font-bold text-lg leading-none flex-shrink-0">+</button>
+                      </div>
+                      <div className="space-y-2">
+                        {freeForm.machineIds.map((mid, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-violet-100 text-violet-700 text-xs font-bold flex items-center justify-center flex-shrink-0">{idx + 1}</div>
+                            <input type="text" value={mid} onChange={e => updateFreeMachineId(idx, e.target.value)}
+                              placeholder={`Machine ${idx + 1} ID`} required
+                              className={INPUT + ' font-mono text-xs'}/>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── Options ── */}
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Notes <span className="text-gray-300">(optional)</span></label>
+                        <textarea value={freeForm.notes} onChange={e => setFreeForm(f => ({...f, notes: e.target.value}))}
+                          rows={2} placeholder="Reason for complimentary license…" className={`${INPUT} resize-none`}/>
+                      </div>
+                      <label className="flex items-center gap-3 cursor-pointer group">
+                        <div className="relative">
+                          <input type="checkbox" className="sr-only" checked={freeForm.createUser}
+                            onChange={e => setFreeForm(f => ({...f, createUser: e.target.checked}))}/>
+                          <div className={`w-10 h-5 rounded-full transition-colors ${freeForm.createUser ? 'bg-violet-600' : 'bg-gray-200'}`}/>
+                          <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${freeForm.createUser ? 'translate-x-5' : ''}`}/>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700 leading-tight">Create dashboard account</p>
+                          <p className="text-xs text-gray-400">Creates a login so the client can access their dashboard. A temporary password will be emailed.</p>
+                        </div>
+                      </label>
+                    </div>
+
+                  </form>
+                </div>
+
+                <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/80 flex gap-3 flex-shrink-0">
+                  <button type="button" onClick={closeFreeModal} className={BTN_GHOST + ' flex-1'}>Cancel</button>
+                  <button type="submit" form="free-form" disabled={submitting}
+                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 flex-1">
+                    {submitting
+                      ? <><svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Issuing…</>
+                      : <><KeyRound size={14}/> Issue Free License</>
+                    }
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
