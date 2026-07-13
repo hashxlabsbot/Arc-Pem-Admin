@@ -280,3 +280,33 @@ model Invoice {
   @@index([userId])
   @@index([issuedAt])
 }
+
+// Blog / CMS — authored in this admin app, read by the marketing site
+// (Arch-Pem-Website-User) which mirrors this model and reads the same table.
+model BlogPost {
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  title           String
+  description     String
+  contentMarkdown String
+  category        String
+  tags            String[]
+  authorName      String?
+  authorRole      String?
+  coverImage      String?
+  coverImageAlt   String?
+  seoTitle        String?
+  featured        Boolean   @default(false)
+  status          String    @default("DRAFT") // DRAFT | PUBLISHED
+  publishedAt     DateTime?
+  updatedDate     DateTime? // deliberate "Updated" editorial signal, not the auto updatedAt
+  relatedTools    String[]
+  relatedPosts    String[]
+  faq             Json?     // [{ q, a }]
+  howto           Json?     // { name, description, steps: [{ name, text }] }
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([category])
+}

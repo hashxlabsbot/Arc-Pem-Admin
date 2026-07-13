@@ -1,0 +1,337 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, Plus, Trash2, Eye, Pencil, RefreshCw, ExternalLink } from 'lucide-react'
+import { BLOG_CATEGORIES, BLOG_RELATED_TOOLS } from '@/lib/blog-constants'
+
+export interface BlogFormData {
+  id?: string
+  slug: string
+  title: string
+  description: string
+  contentMarkdown: string
+  category: string
+  tags: string[]
+  authorName: string
+  authorRole: string
+  coverImage: string
+  coverImageAlt: string
+  seoTitle: string
+  featured: boolean
+  status: string
+  publishedAt: string // yyyy-mm-dd or ''
+  updatedDate: string
+  relatedTools: string[]
+  relatedPosts: string[]
+  faq: { q: string; a: string }[]
+  howto: { name: string; description: string; steps: { name: string; text: string }[] } | null
+}
+
+export const emptyForm: BlogFormData = {
+  slug: '', title: '', description: '', contentMarkdown: '', category: BLOG_CATEGORIES[0],
+  tags: [], authorName: '', authorRole: '', coverImage: '', coverImageAlt: '', seoTitle: '',
+  featured: false, status: 'DRAFT', publishedAt: '', updatedDate: '', relatedTools: [], relatedPosts: [],
+  faq: [], howto: null,
+}
+
+function slugify(s: string) {
+  return s.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+}
+
+const labelCls = 'block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5'
+const inputCls = 'w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400'
+
+export default function BlogEditor({ initial, mode }: { initial: BlogFormData; mode: 'new' | 'edit' }) {
+  const router = useRouter()
+  const [form, setForm] = useState<BlogFormData>(initial)
+  const [slugTouched, setSlugTouched] = useState(mode === 'edit')
+  const [tab, setTab] = useState<'write' | 'preview'>('write')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [savedId, setSavedId] = useState<string | undefined>(initial.id)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  function set<K extends keyof BlogFormData>(key: K, value: BlogFormData[K]) {
+    setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  function onTitleChange(v: string) {
+    setForm((f) => ({ ...f, title: v, slug: slugTouched ? f.slug : slugify(v) }))
+  }
+
+  /** Create/update the post. Returns its id on success (no redirect unless asked). */
+  async function submit(publish: boolean, { redirect }: { redirect: boolean }): Promise<string | null> {
+    setError('')
+    const status = publish ? 'PUBLISHED' : form.status
+    const payload = { ...form, status }
+    if (!payload.title || !payload.description || !payload.category || !payload.contentMarkdown) {
+      setError('Title, description, category and content are all required.')
+      return null
+    }
+    setSaving(true)
+    try {
+      const res = await fetch(savedId ? `/api/blog/${savedId}` : '/api/blog', {
+        method: savedId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error ?? 'Save failed.'); return null }
+      const id: string = data.post.id
+      setSavedId(id)
+      if (status !== form.status) set('status', status)
+      if (redirect) { router.push('/admin/blog'); router.refresh() }
+      return id
+    } catch {
+      setError('Network error. Please try again.')
+      return null
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Fetch a fresh signed preview URL (new token each call → iframe reloads). */
+  async function loadPreview(id: string) {
+    setPreviewLoading(true)
+    try {
+      const res = await fetch(`/api/blog/${id}/preview`)
+      const data = await res.json()
+      if (res.ok) setPreviewUrl(data.url)
+      else setError(data.error ?? 'Could not load preview.')
+    } catch {
+      setError('Could not reach the preview service.')
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  /** Save current edits in place, then (re)load the live preview iframe. */
+  async function saveAndPreview() {
+    const id = await submit(false, { redirect: false })
+    if (id) await loadPreview(id)
+  }
+
+  function goToTab(t: 'write' | 'preview') {
+    setTab(t)
+    if (t === 'preview' && savedId && !previewUrl) loadPreview(savedId)
+  }
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto pb-24">
+      <button onClick={() => router.push('/admin/blog')} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-4">
+        <ArrowLeft size={15} /> Back to posts
+      </button>
+
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-bold text-gray-900">{mode === 'new' ? 'New Post' : 'Edit Post'}</h1>
+        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${form.status === 'PUBLISHED' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+          {form.status === 'PUBLISHED' ? 'Published' : 'Draft'}
+        </span>
+      </div>
+
+      {error && <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-700">{error}</div>}
+
+      <div className="space-y-6">
+        {/* Core */}
+        <Section title="Article">
+          <Field label="Title"><input className={inputCls} value={form.title} onChange={(e) => onTitleChange(e.target.value)} placeholder="How to …" /></Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="URL slug">
+              <input className={inputCls} value={form.slug}
+                onChange={(e) => { setSlugTouched(true); set('slug', slugify(e.target.value)) }}
+                placeholder="how-to-…" />
+              <p className="text-[11px] text-gray-400 mt-1">/blog/{form.slug || '…'}</p>
+            </Field>
+            <Field label="Category">
+              <select className={inputCls} value={form.category} onChange={(e) => set('category', e.target.value)}>
+                {BLOG_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="Description (meta / social / card blurb — ~140-155 chars)">
+            <textarea className={inputCls} rows={2} value={form.description} onChange={(e) => set('description', e.target.value)} />
+            <p className="text-[11px] text-gray-400 mt-1">{form.description.length} chars</p>
+          </Field>
+        </Section>
+
+        {/* Body with live preview */}
+        <Section title="Content (Markdown)">
+          <div className="flex gap-1 mb-2">
+            <TabBtn active={tab === 'write'} onClick={() => goToTab('write')} icon={<Pencil size={13} />}>Write</TabBtn>
+            <TabBtn active={tab === 'preview'} onClick={() => goToTab('preview')} icon={<Eye size={13} />}>Live Preview</TabBtn>
+          </div>
+          {tab === 'write' ? (
+            <>
+              <textarea
+                className={`${inputCls} font-mono text-[13px] leading-relaxed`}
+                rows={20}
+                value={form.contentMarkdown}
+                onChange={(e) => set('contentMarkdown', e.target.value)}
+                placeholder={'## A heading\n\nYour article body in Markdown. Use ## and ### headings, **bold**, lists, [links](/tools), and | tables |.'}
+              />
+              <p className="text-[11px] text-gray-400 mt-1.5">Switch to <strong>Live Preview</strong> to see the exact published page, rendered by the marketing site.</p>
+            </>
+          ) : !savedId ? (
+            <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center bg-gray-50">
+              <p className="text-sm text-gray-600 mb-3">Save the post once to preview it as the real, published page.</p>
+              <button onClick={saveAndPreview} disabled={saving}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
+                {saving ? 'Saving…' : 'Save draft & preview'}
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] text-gray-400">Exactly how the published page looks — drafts are shown safely (not indexed, not public).</p>
+                <div className="flex items-center gap-2">
+                  {previewUrl && (
+                    <a href={previewUrl} target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-blue-600">
+                      <ExternalLink size={13} /> Open
+                    </a>
+                  )}
+                  <button onClick={saveAndPreview} disabled={saving || previewLoading}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-60">
+                    <RefreshCw size={13} className={saving || previewLoading ? 'animate-spin' : ''} />
+                    {saving ? 'Saving…' : 'Save & refresh'}
+                  </button>
+                </div>
+              </div>
+              <div className="border border-gray-200 rounded-lg overflow-hidden bg-white" style={{ height: '75vh' }}>
+                {previewLoading && !previewUrl ? (
+                  <div className="h-full flex items-center justify-center text-sm text-gray-400">Loading live preview…</div>
+                ) : previewUrl ? (
+                  <iframe key={previewUrl} src={previewUrl} title="Live preview" className="w-full h-full border-0" />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-sm text-gray-400">Preview unavailable.</div>
+                )}
+              </div>
+            </div>
+          )}
+        </Section>
+
+        {/* SEO / meta */}
+        <Section title="SEO & Metadata">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="SEO title override (optional)"><input className={inputCls} value={form.seoTitle} onChange={(e) => set('seoTitle', e.target.value)} placeholder="Defaults to the title" /></Field>
+            <Field label="Tags (comma-separated)"><input className={inputCls} value={form.tags.join(', ')} onChange={(e) => set('tags', e.target.value.split(',').map((t) => t.trim()).filter(Boolean))} placeholder="gst, billing" /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Cover image path/URL (optional — else auto card)"><input className={inputCls} value={form.coverImage} onChange={(e) => set('coverImage', e.target.value)} placeholder="/images/finance-analytics.jpg" /></Field>
+            <Field label="Cover image alt text"><input className={inputCls} value={form.coverImageAlt} onChange={(e) => set('coverImageAlt', e.target.value)} /></Field>
+          </div>
+        </Section>
+
+        {/* Author + publishing */}
+        <Section title="Author & Publishing">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Author name (optional — else ARC PEM Team)"><input className={inputCls} value={form.authorName} onChange={(e) => set('authorName', e.target.value)} /></Field>
+            <Field label="Author role"><input className={inputCls} value={form.authorRole} onChange={(e) => set('authorRole', e.target.value)} placeholder="Founder, HashX Labs" /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Publish date (optional)"><input type="date" className={inputCls} value={form.publishedAt} onChange={(e) => set('publishedAt', e.target.value)} /></Field>
+            <Field label="“Updated” date (optional — editorial signal)"><input type="date" className={inputCls} value={form.updatedDate} onChange={(e) => set('updatedDate', e.target.value)} /></Field>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700 mt-1">
+            <input type="checkbox" checked={form.featured} onChange={(e) => set('featured', e.target.checked)} className="rounded" />
+            Feature this post (large slot at the top of /blog)
+          </label>
+        </Section>
+
+        {/* Cross-links */}
+        <Section title="Cross-links">
+          <Field label="Related free tool (renders an inline CTA)">
+            <div className="flex flex-wrap gap-3">
+              {BLOG_RELATED_TOOLS.map((t) => (
+                <label key={t.slug} className="flex items-center gap-1.5 text-sm text-gray-700">
+                  <input type="checkbox" checked={form.relatedTools.includes(t.slug)}
+                    onChange={(e) => set('relatedTools', e.target.checked ? [...form.relatedTools, t.slug] : form.relatedTools.filter((s) => s !== t.slug))} />
+                  {t.name}
+                </label>
+              ))}
+            </div>
+          </Field>
+          <Field label="Related post slugs (comma-separated — else auto by category)">
+            <input className={inputCls} value={form.relatedPosts.join(', ')} onChange={(e) => set('relatedPosts', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} placeholder="some-other-slug" />
+          </Field>
+        </Section>
+
+        {/* FAQ */}
+        <Section title="FAQ (optional — emits FAQ rich-result schema)">
+          {form.faq.map((item, i) => (
+            <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50/50">
+              <div className="flex items-start gap-2">
+                <input className={inputCls} placeholder="Question" value={item.q}
+                  onChange={(e) => set('faq', form.faq.map((f, j) => j === i ? { ...f, q: e.target.value } : f))} />
+                <button onClick={() => set('faq', form.faq.filter((_, j) => j !== i))} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
+              </div>
+              <textarea className={inputCls} rows={2} placeholder="Answer" value={item.a}
+                onChange={(e) => set('faq', form.faq.map((f, j) => j === i ? { ...f, a: e.target.value } : f))} />
+            </div>
+          ))}
+          <button onClick={() => set('faq', [...form.faq, { q: '', a: '' }])} className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"><Plus size={15} /> Add FAQ</button>
+        </Section>
+
+        {/* HowTo */}
+        <Section title="HowTo (optional — emits step-by-step schema)">
+          {form.howto ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="HowTo name"><input className={inputCls} value={form.howto.name} onChange={(e) => set('howto', { ...form.howto!, name: e.target.value })} /></Field>
+                <Field label="HowTo description"><input className={inputCls} value={form.howto.description} onChange={(e) => set('howto', { ...form.howto!, description: e.target.value })} /></Field>
+              </div>
+              {form.howto.steps.map((step, i) => (
+                <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50/50">
+                  <div className="flex items-start gap-2">
+                    <input className={inputCls} placeholder={`Step ${i + 1} name`} value={step.name}
+                      onChange={(e) => set('howto', { ...form.howto!, steps: form.howto!.steps.map((s, j) => j === i ? { ...s, name: e.target.value } : s) })} />
+                    <button onClick={() => set('howto', { ...form.howto!, steps: form.howto!.steps.filter((_, j) => j !== i) })} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
+                  </div>
+                  <textarea className={inputCls} rows={2} placeholder="Step text" value={step.text}
+                    onChange={(e) => set('howto', { ...form.howto!, steps: form.howto!.steps.map((s, j) => j === i ? { ...s, text: e.target.value } : s) })} />
+                </div>
+              ))}
+              <div className="flex gap-3">
+                <button onClick={() => set('howto', { ...form.howto!, steps: [...form.howto!.steps, { name: '', text: '' }] })} className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"><Plus size={15} /> Add step</button>
+                <button onClick={() => set('howto', null)} className="text-sm font-medium text-gray-400 hover:text-red-600">Remove HowTo</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => set('howto', { name: '', description: '', steps: [{ name: '', text: '' }] })} className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"><Plus size={15} /> Add a HowTo</button>
+          )}
+        </Section>
+      </div>
+
+      {/* Sticky action bar */}
+      <div className="fixed bottom-0 left-64 right-0 bg-white/95 backdrop-blur border-t border-gray-200 px-6 py-3 flex items-center justify-end gap-3 z-30">
+        <button onClick={() => submit(false, { redirect: true })} disabled={saving} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-700 border border-gray-200 hover:bg-gray-50 disabled:opacity-60">
+          {saving ? 'Saving…' : 'Save draft'}
+        </button>
+        <button onClick={() => submit(true, { redirect: true })} disabled={saving} className="px-5 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
+          {saving ? 'Publishing…' : form.status === 'PUBLISHED' ? 'Update & republish' : 'Publish'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-5">
+      <h2 className="text-sm font-bold text-gray-900 mb-4">{title}</h2>
+      <div className="space-y-4">{children}</div>
+    </div>
+  )
+}
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div><label className={labelCls}>{label}</label>{children}</div>
+}
+function TabBtn({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <button onClick={onClick} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${active ? 'bg-blue-50 text-blue-700' : 'text-gray-500 hover:bg-gray-100'}`}>
+      {icon}{children}
+    </button>
+  )
+}
