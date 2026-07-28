@@ -1,9 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Trash2, Eye, Pencil, RefreshCw, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Eye, Pencil, RefreshCw, ExternalLink, ImagePlus, Upload, X } from 'lucide-react'
 import { BLOG_CATEGORIES, BLOG_RELATED_TOOLS } from '@/lib/blog-constants'
+
+type ImgSize = 'small' | 'medium' | 'full'
+const IMG_SIZES: { value: ImgSize; label: string; hint: string }[] = [
+  { value: 'small', label: 'Small', hint: '≈360px' },
+  { value: 'medium', label: 'Medium', hint: '≈640px' },
+  { value: 'full', label: 'Full', hint: 'Column width' },
+]
+
+/** Upload an image to Vercel Blob via the admin API; returns its public URL or throws. */
+async function uploadImage(file: File): Promise<string> {
+  const body = new FormData()
+  body.append('file', file)
+  const res = await fetch('/api/blog/upload', { method: 'POST', body })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? 'Upload failed.')
+  return data.url as string
+}
 
 export interface BlogFormData {
   id?: string
@@ -53,8 +70,62 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
 
+  // Inline-image insertion flow
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const cursorRef = useRef<number | null>(null)
+  const bodyFileRef = useRef<HTMLInputElement>(null)
+  const coverFileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [coverUploading, setCoverUploading] = useState(false)
+  const [pendingImg, setPendingImg] = useState<{ url: string; size: ImgSize; alt: string; caption: string } | null>(null)
+
   function set<K extends keyof BlogFormData>(key: K, value: BlogFormData[K]) {
     setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  /** Remember where the caret is so we can splice the image markdown back in later. */
+  function rememberCursor() {
+    cursorRef.current = bodyRef.current?.selectionStart ?? form.contentMarkdown.length
+  }
+
+  async function onPickBodyImage(file: File | undefined) {
+    if (!file) return
+    setError(''); setUploading(true)
+    try {
+      const url = await uploadImage(file)
+      setPendingImg({ url, size: 'medium', alt: '', caption: '' })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed.')
+    } finally {
+      setUploading(false)
+      if (bodyFileRef.current) bodyFileRef.current.value = ''
+    }
+  }
+
+  /** Splice the composed markdown image at the remembered caret position. */
+  function insertPendingImage() {
+    if (!pendingImg) return
+    const { url, size, alt, caption } = pendingImg
+    const titlePart = caption.trim() ? ` "${caption.trim().replace(/"/g, "'")}"` : ''
+    const md = `\n\n![${alt.trim()}](${url}#${size}${titlePart})\n\n`
+    const pos = cursorRef.current ?? form.contentMarkdown.length
+    const next = form.contentMarkdown.slice(0, pos) + md + form.contentMarkdown.slice(pos)
+    set('contentMarkdown', next)
+    setPendingImg(null)
+    cursorRef.current = pos + md.length
+  }
+
+  async function onPickCoverImage(file: File | undefined) {
+    if (!file) return
+    setError(''); setCoverUploading(true)
+    try {
+      set('coverImage', await uploadImage(file))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Upload failed.')
+    } finally {
+      setCoverUploading(false)
+      if (coverFileRef.current) coverFileRef.current.value = ''
+    }
   }
 
   function onTitleChange(v: string) {
@@ -158,17 +229,69 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
 
         {/* Body with live preview */}
         <Section title="Content (Markdown)">
-          <div className="flex gap-1 mb-2">
-            <TabBtn active={tab === 'write'} onClick={() => goToTab('write')} icon={<Pencil size={13} />}>Write</TabBtn>
-            <TabBtn active={tab === 'preview'} onClick={() => goToTab('preview')} icon={<Eye size={13} />}>Live Preview</TabBtn>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex gap-1">
+              <TabBtn active={tab === 'write'} onClick={() => goToTab('write')} icon={<Pencil size={13} />}>Write</TabBtn>
+              <TabBtn active={tab === 'preview'} onClick={() => goToTab('preview')} icon={<Eye size={13} />}>Live Preview</TabBtn>
+            </div>
+            {tab === 'write' && (
+              <button
+                type="button"
+                onClick={() => { rememberCursor(); bodyFileRef.current?.click() }}
+                disabled={uploading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-60"
+              >
+                {uploading ? <RefreshCw size={13} className="animate-spin" /> : <ImagePlus size={13} />}
+                {uploading ? 'Uploading…' : 'Insert image'}
+              </button>
+            )}
+            <input ref={bodyFileRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => onPickBodyImage(e.target.files?.[0])} />
           </div>
+
+          {pendingImg && (
+            <div className="mb-3 border border-blue-200 bg-blue-50/50 rounded-lg p-3">
+              <div className="flex items-start justify-between mb-2">
+                <p className="text-xs font-bold text-gray-800">Insert image</p>
+                <button type="button" onClick={() => setPendingImg(null)} className="p-1 text-gray-400 hover:text-red-600"><X size={14} /></button>
+              </div>
+              <div className="flex gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={pendingImg.url} alt="" className="w-24 h-24 object-cover rounded-md border border-gray-200 flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="flex gap-1.5">
+                    {IMG_SIZES.map((s) => (
+                      <button key={s.value} type="button"
+                        onClick={() => setPendingImg((p) => p && { ...p, size: s.value })}
+                        className={`flex-1 px-2 py-1.5 rounded-md text-xs font-semibold border transition ${pendingImg.size === s.value ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>
+                        {s.label}<span className="block text-[10px] font-normal opacity-70">{s.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <input className={inputCls} placeholder="Alt text (accessibility / SEO)"
+                    value={pendingImg.alt} onChange={(e) => setPendingImg((p) => p && { ...p, alt: e.target.value })} />
+                  <input className={inputCls} placeholder="Caption (optional)"
+                    value={pendingImg.caption} onChange={(e) => setPendingImg((p) => p && { ...p, caption: e.target.value })} />
+                </div>
+              </div>
+              <div className="flex justify-end mt-2">
+                <button type="button" onClick={insertPendingImage}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700">
+                  Insert at cursor
+                </button>
+              </div>
+            </div>
+          )}
+
           {tab === 'write' ? (
             <>
               <textarea
+                ref={bodyRef}
                 className={`${inputCls} font-mono text-[13px] leading-relaxed`}
                 rows={20}
                 value={form.contentMarkdown}
                 onChange={(e) => set('contentMarkdown', e.target.value)}
+                onSelect={rememberCursor}
                 placeholder={'## A heading\n\nYour article body in Markdown. Use ## and ### headings, **bold**, lists, [links](/tools), and | tables |.'}
               />
               <p className="text-[11px] text-gray-400 mt-1.5">Switch to <strong>Live Preview</strong> to see the exact published page, rendered by the marketing site.</p>
@@ -219,7 +342,18 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
             <Field label="Tags (comma-separated)"><input className={inputCls} value={form.tags.join(', ')} onChange={(e) => set('tags', e.target.value.split(',').map((t) => t.trim()).filter(Boolean))} placeholder="gst, billing" /></Field>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Cover image path/URL (optional — else auto card)"><input className={inputCls} value={form.coverImage} onChange={(e) => set('coverImage', e.target.value)} placeholder="/images/finance-analytics.jpg" /></Field>
+            <Field label="Cover image path/URL (optional — else auto card)">
+              <div className="flex gap-2">
+                <input className={inputCls} value={form.coverImage} onChange={(e) => set('coverImage', e.target.value)} placeholder="/images/finance-analytics.jpg or upload →" />
+                <button type="button" onClick={() => coverFileRef.current?.click()} disabled={coverUploading}
+                  className="inline-flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-60 whitespace-nowrap">
+                  {coverUploading ? <RefreshCw size={13} className="animate-spin" /> : <Upload size={13} />}
+                  {coverUploading ? '…' : 'Upload'}
+                </button>
+                <input ref={coverFileRef} type="file" accept="image/*" className="hidden"
+                  onChange={(e) => onPickCoverImage(e.target.files?.[0])} />
+              </div>
+            </Field>
             <Field label="Cover image alt text"><input className={inputCls} value={form.coverImageAlt} onChange={(e) => set('coverImageAlt', e.target.value)} /></Field>
           </div>
         </Section>

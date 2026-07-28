@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FileText, Plus, Search, Pencil, Trash2, Star, ExternalLink } from 'lucide-react'
+import { FileText, Plus, Search, Pencil, Trash2, Star, ExternalLink, BarChart3, Eye } from 'lucide-react'
 import { usePaginatedList } from '@/lib/use-paginated-list'
 import { Pagination } from '@/components/admin/Pagination'
 import { BLOG_CATEGORIES } from '@/lib/blog-constants'
@@ -17,6 +17,7 @@ interface Post {
   featured: boolean
   publishedAt: string | null
   updatedAt: string
+  viewCount: number
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -72,12 +73,20 @@ export default function BlogListPage() {
             {stats.total ?? 0} posts · {stats.published ?? 0} published
           </p>
         </div>
-        <Link
-          href="/admin/blog/new"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
-        >
-          <Plus size={16} /> New Post
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/blog/analytics"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition"
+          >
+            <BarChart3 size={16} /> Analytics
+          </Link>
+          <Link
+            href="/admin/blog/new"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
+          >
+            <Plus size={16} /> New Post
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -120,15 +129,16 @@ export default function BlogListPage() {
               <th className="px-5 py-3">Title</th>
               <th className="px-5 py-3">Category</th>
               <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3 text-right">Views</th>
               <th className="px-5 py-3">Published</th>
               <th className="px-5 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={6} className="px-5 py-10 text-center text-gray-400">Loading…</td></tr>
             ) : posts.length === 0 ? (
-              <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-400">No posts yet. Create your first one.</td></tr>
+              <tr><td colSpan={6} className="px-5 py-10 text-center text-gray-400">No posts yet. Create your first one.</td></tr>
             ) : (
               posts.map((p) => (
                 <tr
@@ -146,6 +156,11 @@ export default function BlogListPage() {
                   <td className="px-5 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[p.status] ?? ''}`}>
                       {p.status === 'PUBLISHED' ? 'Published' : 'Draft'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-right text-gray-600 tabular-nums">
+                    <span className="inline-flex items-center gap-1 justify-end">
+                      <Eye size={13} className="text-gray-400" /> {p.viewCount.toLocaleString('en-IN')}
                     </span>
                   </td>
                   <td className="px-5 py-3 text-gray-500">

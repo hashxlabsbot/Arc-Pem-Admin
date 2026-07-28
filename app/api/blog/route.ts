@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
         take: pageSize,
         select: {
           id: true, slug: true, title: true, category: true, status: true,
-          featured: true, publishedAt: true, updatedAt: true,
+          featured: true, publishedAt: true, updatedAt: true, viewCount: true,
         },
       }),
       db.blogPost.count({ where }),

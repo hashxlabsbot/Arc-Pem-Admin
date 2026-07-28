@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.7.0",
+    "@vercel/blob": "^2.6.1",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.0",
     "lucide-react": "^0.303.0",

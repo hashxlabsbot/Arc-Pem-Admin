@@ -304,9 +304,33 @@ model BlogPost {
   relatedPosts    String[]
   faq             Json?     // [{ q, a }]
   howto           Json?     // { name, description, steps: [{ name, text }] }
+  viewCount       Int       @default(0) // denormalised all-time total (cheap sort/display)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   @@index([status, publishedAt])
   @@index([category])
+}
+
+// Per-day rollup of blog traffic. Written by the marketing site's /api/blog/view
+// beacon; read by the admin analytics dashboard.
+model BlogPostView {
+  id      String   @id @default(cuid())
+  slug    String
+  date    DateTime @db.Date
+  views   Int      @default(0)
+  uniques Int      @default(0)
+
+  @@unique([slug, date])
+  @@index([slug])
+}
+
+// One row per (post, day, visitor) — bounded de-dup that drives the `uniques`
+// (reach) counter. Insert fails on the composite PK for a repeat visitor.
+model BlogPostVisit {
+  slug        String
+  date        DateTime @db.Date
+  visitorHash String
+
+  @@id([slug, date, visitorHash])
 }

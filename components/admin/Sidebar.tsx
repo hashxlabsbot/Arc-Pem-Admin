@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import {
   LayoutDashboard, Users, BarChart3, CreditCard, LogOut,
-  Building2, ShieldCheck, Key, Bell, Activity, Settings, Wallet, FileText,
+  Building2, ShieldCheck, Key, Bell, Activity, Settings, Wallet, FileText, TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -32,6 +32,7 @@ const sections = [
     label: 'Content',
     items: [
       { href: '/admin/blog', label: 'Blog', icon: FileText },
+      { href: '/admin/blog/analytics', label: 'Blog Analytics', icon: TrendingUp },
     ],
   },
   {
