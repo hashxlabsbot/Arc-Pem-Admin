@@ -6,6 +6,7 @@ import { logActivity } from '@/lib/activity'
 import { logger } from '@/lib/logger'
 import { buildBlogData } from '@/lib/blog-fields'
 import { revalidateMarketingBlog } from '@/lib/blog-revalidate'
+import { canManageBlog } from '@/lib/rbac'
 import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -16,7 +17,7 @@ const MAX_PAGE_SIZE = 200
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== 'ADMIN') {
+    if (!session || !canManageBlog(session.user.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== 'ADMIN') {
+    if (!session || !canManageBlog(session.user.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

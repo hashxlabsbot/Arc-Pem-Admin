@@ -6,11 +6,19 @@ export default withAuth(
     const token = req.nextauth.token
     const { pathname } = req.nextUrl
 
-    // If accessing admin routes, require ADMIN role
-    if (pathname.startsWith('/admin') && token?.role !== 'ADMIN') {
-      return NextResponse.redirect(
-        new URL('/login?error=unauthorized', req.url)
-      )
+    if (pathname.startsWith('/admin')) {
+      // BLOG_EDITOR is scoped to the blog section only — bounce anything else
+      // in /admin back to it rather than to login (they are authenticated,
+      // just not authorized for that area).
+      if (token?.role === 'BLOG_EDITOR') {
+        if (!pathname.startsWith('/admin/blog')) {
+          return NextResponse.redirect(new URL('/admin/blog', req.url))
+        }
+      } else if (token?.role !== 'ADMIN') {
+        return NextResponse.redirect(
+          new URL('/login?error=unauthorized', req.url)
+        )
+      }
     }
 
     return NextResponse.next()

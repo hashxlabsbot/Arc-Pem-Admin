@@ -6,17 +6,18 @@ import { logActivity } from '@/lib/activity'
 import { logger } from '@/lib/logger'
 import { buildBlogData } from '@/lib/blog-fields'
 import { revalidateMarketingBlog } from '@/lib/blog-revalidate'
+import { canManageBlog } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
-async function requireAdmin() {
+async function requireBlogAccess() {
   const session = await getServerSession(authOptions)
-  return session && session.user.role === 'ADMIN'
+  return !!session && canManageBlog(session.user.role)
 }
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    if (!(await requireAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await requireBlogAccess())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const post = await db.blogPost.findUnique({ where: { id: params.id } })
     if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     return NextResponse.json({ post })
@@ -28,7 +29,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    if (!(await requireAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await requireBlogAccess())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const existing = await db.blogPost.findUnique({ where: { id: params.id } })
     if (!existing) return NextResponse.json({ error: 'Post not found' }, { status: 404 })
@@ -69,7 +70,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    if (!(await requireAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!(await requireBlogAccess())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const post = await db.blogPost.findUnique({ where: { id: params.id } })
     if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 })

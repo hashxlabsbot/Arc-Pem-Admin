@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import {
   LayoutDashboard, Users, BarChart3, CreditCard, LogOut,
-  Building2, ShieldCheck, Key, Bell, Activity, Settings, Wallet, FileText, TrendingUp,
+  Building2, ShieldCheck, Key, Bell, Activity, Settings, Wallet, FileText, TrendingUp, UserCog,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -38,6 +38,7 @@ const sections = [
   {
     label: 'System',
     items: [
+      { href: '/admin/team',     label: 'Team',     icon: UserCog },
       { href: '/admin/alerts',   label: 'Alerts',   icon: Bell },
       { href: '/admin/activity', label: 'Activity', icon: Activity },
       { href: '/admin/settings', label: 'Settings', icon: Settings },
@@ -45,7 +46,7 @@ const sections = [
   },
 ]
 
-interface SidebarProps { user: { name?: string | null; email?: string | null } }
+interface SidebarProps { user: { name?: string | null; email?: string | null }; role?: string }
 
 function NavItem({ href, label, icon: Icon, exact }: { href: string; label: string; icon: React.ElementType; exact?: boolean }) {
   const pathname = usePathname()
@@ -66,10 +67,15 @@ function NavItem({ href, label, icon: Icon, exact }: { href: string; label: stri
   )
 }
 
-export function Sidebar({ user }: SidebarProps) {
+export function Sidebar({ user, role }: SidebarProps) {
   const initials = user.name
     ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : 'A'
+  // BLOG_EDITOR only sees the Content section — everything else (customers,
+  // billing, licenses, team, settings) is out of scope for that role.
+  const visibleSections = role === 'BLOG_EDITOR'
+    ? sections.filter((s) => s.label === 'Content')
+    : sections
 
   return (
     <aside className="fixed inset-y-0 left-0 w-64 bg-slate-900 flex flex-col z-40">
@@ -90,7 +96,7 @@ export function Sidebar({ user }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-hide space-y-5">
-        {sections.map(section => (
+        {visibleSections.map(section => (
           <div key={section.label}>
             <p className="px-3 text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5">
               {section.label}

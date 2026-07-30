@@ -14,14 +14,21 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   '/admin/alerts':        { title: 'Alerts',        subtitle: 'License expiry warnings' },
   '/admin/activity':      { title: 'Activity Log',  subtitle: 'Audit trail of admin actions' },
   '/admin/settings':      { title: 'Settings',      subtitle: 'System configuration' },
+  '/admin/blog':          { title: 'Blog',          subtitle: 'Posts and CMS content' },
+  '/admin/blog/analytics':{ title: 'Blog Analytics', subtitle: 'Views and reach per post' },
+  '/admin/team':          { title: 'Team',          subtitle: 'Admin and blog editor accounts' },
 }
 
-export function Header() {
+export function Header({ role }: { role?: string }) {
   const pathname = usePathname()
   const info =
     PAGE_TITLES[pathname] ??
-    Object.entries(PAGE_TITLES).find(([k]) => pathname.startsWith(k) && k !== '/admin')?.[1] ??
+    Object.entries(PAGE_TITLES)
+      .filter(([k]) => k !== '/admin')
+      .sort((a, b) => b[0].length - a[0].length)
+      .find(([k]) => pathname.startsWith(k))?.[1] ??
     { title: 'Admin', subtitle: '' }
+  const badgeLabel = role === 'BLOG_EDITOR' ? 'BLOG EDITOR' : 'ADMIN'
 
   return (
     <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-6 sticky top-0 z-30 shadow-sm">
@@ -37,7 +44,7 @@ export function Header() {
         </button>
         <div className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl">
           <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
-          ADMIN
+          {badgeLabel}
         </div>
       </div>
     </header>

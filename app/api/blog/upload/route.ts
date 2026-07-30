@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { put } from '@vercel/blob'
 import { authOptions } from '@/lib/auth'
 import { logger } from '@/lib/logger'
+import { canManageBlog } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,11 +22,11 @@ function safeName(name: string): string {
   return `blog/${base}.${ext}`
 }
 
-/** Upload a blog image to Vercel Blob and return its public CDN URL. ADMIN only. */
+/** Upload a blog image to Vercel Blob and return its public CDN URL. ADMIN / BLOG_EDITOR only. */
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session || session.user.role !== 'ADMIN') {
+    if (!session || !canManageBlog(session.user.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
