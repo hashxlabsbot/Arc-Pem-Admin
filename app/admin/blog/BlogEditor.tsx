@@ -2,8 +2,9 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, Trash2, Eye, Pencil, RefreshCw, ExternalLink, ImagePlus, Upload, X } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, Eye, Pencil, RefreshCw, ExternalLink, ImagePlus, Upload, X, Crop } from 'lucide-react'
 import { BLOG_CATEGORIES, BLOG_RELATED_TOOLS } from '@/lib/blog-constants'
+import { ImageCropModal, type AspectOption } from '@/components/admin/ImageCropModal'
 
 type ImgSize = 'small' | 'medium' | 'full'
 const IMG_SIZES: { value: ImgSize; label: string; hint: string }[] = [
@@ -11,6 +12,20 @@ const IMG_SIZES: { value: ImgSize; label: string; hint: string }[] = [
   { value: 'medium', label: 'Medium', hint: '≈640px' },
   { value: 'full', label: 'Full', hint: 'Column width' },
 ]
+
+// SVGs are vector (cropping to a raster canvas defeats the point) and GIFs are
+// often animated (canvas cropping would flatten them to one frame) — skip the
+// crop step for both and upload as-is.
+const SKIP_CROP_TYPES = new Set(['image/svg+xml', 'image/gif'])
+const COVER_ASPECT = 1200 / 630 // standard OG/social card ratio
+const BODY_ASPECT_OPTIONS: AspectOption[] = [
+  { label: 'Free', value: null },
+  { label: 'Square', value: 1 },
+  { label: '4:3', value: 4 / 3 },
+  { label: '16:9', value: 16 / 9 },
+]
+
+interface PendingCrop { src: string; file: File; forExisting?: boolean }
 
 /** Upload an image to Vercel Blob via the admin API; returns its public URL or throws. */
 async function uploadImage(file: File): Promise<string> {
@@ -78,6 +93,9 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
   const [uploading, setUploading] = useState(false)
   const [coverUploading, setCoverUploading] = useState(false)
   const [pendingImg, setPendingImg] = useState<{ url: string; size: ImgSize; alt: string; caption: string } | null>(null)
+  const [coverCrop, setCoverCrop] = useState<PendingCrop | null>(null)
+  const [bodyCrop, setBodyCrop] = useState<PendingCrop | null>(null)
+  const [coverRecropLoading, setCoverRecropLoading] = useState(false)
 
   function set<K extends keyof BlogFormData>(key: K, value: BlogFormData[K]) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -90,16 +108,42 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
 
   async function onPickBodyImage(file: File | undefined) {
     if (!file) return
+    if (bodyFileRef.current) bodyFileRef.current.value = ''
+    if (SKIP_CROP_TYPES.has(file.type)) {
+      setError(''); setUploading(true)
+      try {
+        const url = await uploadImage(file)
+        setPendingImg({ url, size: 'medium', alt: '', caption: '' })
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Upload failed.')
+      } finally {
+        setUploading(false)
+      }
+      return
+    }
+    setBodyCrop({ src: URL.createObjectURL(file), file })
+  }
+
+  async function onBodyCropConfirm(blob: Blob) {
+    if (!bodyCrop) return
     setError(''); setUploading(true)
+    const { src, file } = bodyCrop
     try {
-      const url = await uploadImage(file)
+      const cropped = new File([blob], file.name, { type: blob.type })
+      const url = await uploadImage(cropped)
       setPendingImg({ url, size: 'medium', alt: '', caption: '' })
+      setBodyCrop(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed.')
     } finally {
       setUploading(false)
-      if (bodyFileRef.current) bodyFileRef.current.value = ''
+      URL.revokeObjectURL(src)
     }
+  }
+
+  function onBodyCropCancel() {
+    if (bodyCrop) URL.revokeObjectURL(bodyCrop.src)
+    setBodyCrop(null)
   }
 
   /** Splice the composed markdown image at the remembered caret position. */
@@ -117,15 +161,58 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
 
   async function onPickCoverImage(file: File | undefined) {
     if (!file) return
-    setError(''); setCoverUploading(true)
+    if (coverFileRef.current) coverFileRef.current.value = ''
+    if (SKIP_CROP_TYPES.has(file.type)) {
+      setError(''); setCoverUploading(true)
+      try {
+        set('coverImage', await uploadImage(file))
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Upload failed.')
+      } finally {
+        setCoverUploading(false)
+      }
+      return
+    }
+    setCoverCrop({ src: URL.createObjectURL(file), file })
+  }
+
+  /** Re-open the cropper on the cover image that's already uploaded, to reposition/re-crop it. */
+  async function reCropExistingCover() {
+    if (!form.coverImage) return
+    setError(''); setCoverRecropLoading(true)
     try {
-      set('coverImage', await uploadImage(file))
+      const res = await fetch(form.coverImage)
+      if (!res.ok) throw new Error('Could not load the current cover image.')
+      const blob = await res.blob()
+      const type = blob.type || 'image/jpeg'
+      const file = new File([blob], 'cover', { type })
+      setCoverCrop({ src: URL.createObjectURL(blob), file, forExisting: true })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load the current cover image to re-crop.')
+    } finally {
+      setCoverRecropLoading(false)
+    }
+  }
+
+  async function onCoverCropConfirm(blob: Blob) {
+    if (!coverCrop) return
+    setError(''); setCoverUploading(true)
+    const { src, file } = coverCrop
+    try {
+      const cropped = new File([blob], file.name || 'cover', { type: blob.type })
+      set('coverImage', await uploadImage(cropped))
+      setCoverCrop(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed.')
     } finally {
       setCoverUploading(false)
-      if (coverFileRef.current) coverFileRef.current.value = ''
+      URL.revokeObjectURL(src)
     }
+  }
+
+  function onCoverCropCancel() {
+    if (coverCrop) URL.revokeObjectURL(coverCrop.src)
+    setCoverCrop(null)
   }
 
   function onTitleChange(v: string) {
@@ -344,7 +431,18 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
           <div className="grid grid-cols-2 gap-4">
             <Field label="Cover image path/URL (optional — else auto card)">
               <div className="flex gap-2">
+                {form.coverImage && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.coverImage} alt="" className="w-11 h-11 object-cover rounded-md border border-gray-200 flex-shrink-0" />
+                )}
                 <input className={inputCls} value={form.coverImage} onChange={(e) => set('coverImage', e.target.value)} placeholder="/images/finance-analytics.jpg or upload →" />
+                {form.coverImage && (
+                  <button type="button" onClick={reCropExistingCover} disabled={coverRecropLoading || coverUploading}
+                    className="inline-flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-60 whitespace-nowrap">
+                    {coverRecropLoading ? <RefreshCw size={13} className="animate-spin" /> : <Crop size={13} />}
+                    {coverRecropLoading ? '…' : 'Adjust'}
+                  </button>
+                )}
                 <button type="button" onClick={() => coverFileRef.current?.click()} disabled={coverUploading}
                   className="inline-flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-60 whitespace-nowrap">
                   {coverUploading ? <RefreshCw size={13} className="animate-spin" /> : <Upload size={13} />}
@@ -437,6 +535,31 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
           )}
         </Section>
       </div>
+
+      {coverCrop && (
+        <ImageCropModal
+          imageSrc={coverCrop.src}
+          mimeType={coverCrop.file.type || 'image/jpeg'}
+          title={coverCrop.forExisting ? 'Adjust cover image' : 'Crop cover image'}
+          aspect={COVER_ASPECT}
+          aspectHint="1200×630 — the ratio used for social/share cards"
+          confirmLabel="Use cover image"
+          onCancel={onCoverCropCancel}
+          onConfirm={onCoverCropConfirm}
+        />
+      )}
+
+      {bodyCrop && (
+        <ImageCropModal
+          imageSrc={bodyCrop.src}
+          mimeType={bodyCrop.file.type || 'image/jpeg'}
+          title="Crop image"
+          aspectOptions={BODY_ASPECT_OPTIONS}
+          confirmLabel="Continue"
+          onCancel={onBodyCropCancel}
+          onConfirm={onBodyCropConfirm}
+        />
+      )}
 
       {/* Sticky action bar */}
       <div className="fixed bottom-0 left-64 right-0 bg-white/95 backdrop-blur border-t border-gray-200 px-6 py-3 flex items-center justify-end gap-3 z-30">
