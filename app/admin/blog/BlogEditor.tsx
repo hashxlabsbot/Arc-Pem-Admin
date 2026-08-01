@@ -542,7 +542,7 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
           mimeType={coverCrop.file.type || 'image/jpeg'}
           title={coverCrop.forExisting ? 'Adjust cover image' : 'Crop cover image'}
           aspect={COVER_ASPECT}
-          aspectHint="1200×630 — the ratio used for social/share cards"
+          aspectHint="1200×630 — matches the featured/card/cover frames on the site and social share cards"
           confirmLabel="Use cover image"
           onCancel={onCoverCropCancel}
           onConfirm={onCoverCropConfirm}
