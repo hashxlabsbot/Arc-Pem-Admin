@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import {
   LayoutDashboard, Users, BarChart3, CreditCard, LogOut,
-  Building2, ShieldCheck, Key, Bell, Activity, Settings, Wallet, FileText, TrendingUp, UserCog,
+  Building2, ShieldCheck, Key, Bell, Activity, Settings, Wallet, FileText, TrendingUp, UserCog, Video,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -23,9 +23,10 @@ const sections = [
   {
     label: 'Clients',
     items: [
-      { href: '/admin/clients',  label: 'Clients',  icon: Building2 },
-      { href: '/admin/licenses', label: 'Licenses', icon: ShieldCheck },
-      { href: '/admin/api-keys', label: 'API Keys', icon: Key },
+      { href: '/admin/clients',       label: 'Clients',       icon: Building2 },
+      { href: '/admin/licenses',      label: 'Licenses',      icon: ShieldCheck },
+      { href: '/admin/api-keys',      label: 'API Keys',      icon: Key },
+      { href: '/admin/demo-bookings', label: 'Demo Bookings', icon: Video },
     ],
   },
   {

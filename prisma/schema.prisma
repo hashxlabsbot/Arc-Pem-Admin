@@ -281,6 +281,30 @@ model Invoice {
   @@index([issuedAt])
 }
 
+// Demo requests submitted from the marketing site's "Book a Free Demo" modal.
+// Written by Arch-Pem-Website-User (which mirrors this model — see that repo's
+// schema.prisma), read/managed here under Admin → Demo Bookings.
+model DemoBooking {
+  id              String   @id @default(cuid())
+  name            String
+  email           String
+  whatsapp        String
+  company         String?
+  role            String?
+  teamSize        String?
+  preferredDate   String?
+  preferredTime   String?
+  // Google Meet link + Calendar event id, set once the calendar event is created.
+  meetLink        String?
+  calendarEventId String?
+  // PENDING | CONFIRMED (Meet link generated) | FAILED (Meet generation failed — needs a manual link)
+  status          String   @default("PENDING")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
 // Blog / CMS — authored in this admin app, read by the marketing site
 // (Arch-Pem-Website-User) which mirrors this model and reads the same table.
 model BlogPost {
