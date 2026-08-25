@@ -14,6 +14,7 @@ import { db } from '@/lib/db'
 import { sendApprovalEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity'
 import { generateInvoiceForPayment } from '@/lib/invoice'
+import { verifyInternalKey } from '@/lib/internal-auth'
 
 export const runtime = 'nodejs'
 
@@ -30,12 +31,10 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   try {
     // Shared-secret guard — website must send INTERNAL_API_KEY in header.
-    const internalKey = process.env.INTERNAL_API_KEY
-    if (internalKey) {
-      const provided = req.headers.get('x-internal-key')
-      if (provided !== internalKey) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS })
-      }
+    // Fails closed: an unconfigured secret rejects every request rather than
+    // silently allowing them through.
+    if (!verifyInternalKey(req)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS })
     }
 
     const body = await req.json()

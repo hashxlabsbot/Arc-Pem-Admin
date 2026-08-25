@@ -8,7 +8,9 @@ import { canManageBlog } from '@/lib/rbac'
 export const dynamic = 'force-dynamic'
 
 const MAX_BYTES = 5 * 1024 * 1024 // 5 MB
-const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/svg+xml']
+// SVG is deliberately excluded — it can embed <script>/event-handler payloads
+// that execute if the stored blob URL is ever opened directly (stored XSS).
+const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif']
 
 /** Slugify a filename to keep the blob key tidy — the random suffix guarantees uniqueness. */
 function safeName(name: string): string {
@@ -40,7 +42,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No file provided.' }, { status: 400 })
     }
     if (!ALLOWED.includes(file.type)) {
-      return NextResponse.json({ error: 'Unsupported file type. Use JPG, PNG, WEBP, GIF, AVIF or SVG.' }, { status: 400 })
+      return NextResponse.json({ error: 'Unsupported file type. Use JPG, PNG, WEBP, GIF, or AVIF.' }, { status: 400 })
     }
     if (file.size > MAX_BYTES) {
       return NextResponse.json({ error: 'Image is larger than 5 MB.' }, { status: 400 })

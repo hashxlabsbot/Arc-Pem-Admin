@@ -1,9 +1,28 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
+import { timingSafeEqual } from 'crypto'
 import { db } from '@/lib/db'
 import { env } from '@/lib/env'
 import { checkRateLimit, recordFailure, resetLimit } from '@/lib/rate-limit'
+
+/**
+ * Constant-time string comparison. A `!==` short-circuits on the first
+ * mismatched byte, leaking how many leading characters were guessed
+ * correctly over repeated timed requests — unacceptable for the bootstrap
+ * admin password, which has no DB-side bcrypt cost to mask the timing.
+ */
+function safeCompare(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a)
+  const bBuf = Buffer.from(b)
+  if (aBuf.length !== bBuf.length) {
+    // Do a same-length comparison anyway so a length mismatch doesn't
+    // return faster than a same-length-but-wrong-content mismatch.
+    timingSafeEqual(aBuf, aBuf)
+    return false
+  }
+  return timingSafeEqual(aBuf, bBuf)
+}
 
 // Generic message — prevents user enumeration ("no account" vs "wrong password")
 const INVALID_MSG = 'Invalid email or password.'
@@ -43,7 +62,7 @@ export const authOptions: NextAuthOptions = {
         const adminEmail    = env.adminEmail()?.trim().toLowerCase()
         const adminPassword = env.adminPassword()
         if (adminEmail && adminPassword && email === adminEmail) {
-          if (credentials.password !== adminPassword) {
+          if (!safeCompare(credentials.password, adminPassword)) {
             await recordFailure(`login:${email}`)
             const updated = await checkRateLimit(`login:${email}`)
             if (!updated.allowed) throw new Error(LOCKED_MSG)

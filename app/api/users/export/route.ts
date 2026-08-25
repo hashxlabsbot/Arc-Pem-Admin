@@ -12,8 +12,17 @@ export const dynamic = 'force-dynamic'
 // never loads the whole table into memory at once.
 const BATCH = 1000
 
+// Formula-injection guard: a cell starting with = + - @ (or tab/CR, which
+// some spreadsheet apps also treat as a formula prefix) is opened by Excel/
+// Sheets as a live formula rather than text. Values here come from
+// user-supplied fields (name, email), so prefix those characters with a
+// leading apostrophe to force text interpretation before quoting.
+const FORMULA_PREFIX_RE = /^[=+\-@\t\r]/
+
 function csvCell(value: unknown): string {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`
+  let str = String(value ?? '')
+  if (FORMULA_PREFIX_RE.test(str)) str = `'${str}`
+  return `"${str.replace(/"/g, '""')}"`
 }
 
 function formatDate(d: Date): string {

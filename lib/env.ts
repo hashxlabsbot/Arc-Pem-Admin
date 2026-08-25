@@ -20,6 +20,7 @@ type EnvKey =
   | 'UPSTASH_REDIS_REST_URL'
   | 'UPSTASH_REDIS_REST_TOKEN'
   | 'ALLOWED_ORIGINS'
+  | 'INTERNAL_API_KEY'
 
 const REQUIRED: EnvKey[] = ['DATABASE_URL', 'NEXTAUTH_SECRET', 'NEXTAUTH_URL']
 
@@ -58,6 +59,8 @@ export const env = {
   licensePrivateKey: () => get('LICENSE_PRIVATE_KEY'),
   upstashUrl: () => get('UPSTASH_REDIS_REST_URL'),
   upstashToken: () => get('UPSTASH_REDIS_REST_TOKEN'),
+  /** Shared secret the website must send (X-Internal-Key) to call server-to-server payment endpoints. */
+  internalApiKey: () => get('INTERNAL_API_KEY'),
   /** Comma-separated list of origins allowed for Server Actions / CORS. */
   allowedOrigins: (): string[] => {
     const raw = get('ALLOWED_ORIGINS')
