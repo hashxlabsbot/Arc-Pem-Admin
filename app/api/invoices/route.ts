@@ -15,25 +15,26 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
 }
 
-// List invoice metadata (never the PDF bytes). Admins see all (or filter by ?email=);
-// the purchase app / a user passes ?email= to list that user's invoices.
+// List invoice metadata (never the PDF bytes). Requires a session — admins may
+// filter by ?email= to see any user's invoices; everyone else only ever sees
+// their own (the ?email= param is ignored for non-admins, same pattern as
+// GET /api/billing).
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    const email = req.nextUrl.searchParams.get('email')?.trim().toLowerCase()
-    const isAdmin = session?.user?.role === 'ADMIN'
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS })
+    }
+
+    const requestedEmail = req.nextUrl.searchParams.get('email')?.trim().toLowerCase()
+    const isAdmin = session.user.role === 'ADMIN'
+    // Non-admins are always scoped to their own email (requestedEmail is
+    // ignored for them). Admins may pass ?email= to scope to one user, or
+    // omit it to see every invoice.
+    const email = isAdmin ? requestedEmail : session.user.email?.toLowerCase()
 
     let userId: string | undefined
-    if (!isAdmin) {
-      // Non-admins must scope to a specific user (their own email or the one provided).
-      const scopedEmail = email ?? session?.user?.email?.toLowerCase()
-      if (!scopedEmail) {
-        return NextResponse.json({ error: 'email is required.' }, { status: 400, headers: CORS_HEADERS })
-      }
-      const user = await db.user.findUnique({ where: { email: scopedEmail }, select: { id: true } })
-      if (!user) return NextResponse.json({ invoices: [] }, { headers: CORS_HEADERS })
-      userId = user.id
-    } else if (email) {
+    if (email) {
       const user = await db.user.findUnique({ where: { email }, select: { id: true } })
       if (!user) return NextResponse.json({ invoices: [] }, { headers: CORS_HEADERS })
       userId = user.id

@@ -15,6 +15,7 @@ import { sendApprovalEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity'
 import { generateInvoiceForPayment } from '@/lib/invoice'
 import { verifyInternalKey } from '@/lib/internal-auth'
+import { annualPrice } from '@/lib/pricing'
 
 export const runtime = 'nodejs'
 
@@ -38,11 +39,11 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { userId, planId, planName, amount, utr } = body
+    const { userId, planId, utr } = body
 
-    if (!userId || !planId || !planName || !amount || !utr) {
+    if (!userId || !planId || !utr) {
       return NextResponse.json(
-        { error: 'userId, planId, planName, amount, and utr are required' },
+        { error: 'userId, planId, and utr are required' },
         { status: 400, headers: CORS_HEADERS },
       )
     }
@@ -57,6 +58,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Plan not found' }, { status: 404, headers: CORS_HEADERS })
     }
 
+    // Derived server-side, never from the request body — this endpoint feeds
+    // straight into a legally-relevant GST invoice, so the amount/plan name
+    // must come from the authoritative Plan record (same convention as
+    // /api/payments/webhook's amount cross-check).
+    const planName = plan.name
+    const amount = annualPrice(plan.price)
+
     // Reject if user already has an approved payment for this plan to prevent duplicates.
     const existing = await db.pendingPayment.findFirst({
       where: { userId, planId, status: 'approved' },
@@ -70,7 +78,7 @@ export async function POST(req: NextRequest) {
 
     // Create PendingPayment and immediately approve it atomically.
     const payment = await db.pendingPayment.create({
-      data: { userId, planId, planName, amount: Number(amount), utr, status: 'pending' },
+      data: { userId, planId, planName, amount, utr, status: 'pending' },
     })
 
     await db.$transaction([
