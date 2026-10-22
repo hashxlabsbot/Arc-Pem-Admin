@@ -14,8 +14,11 @@ interface PlanForm {
   description: string
   maxProjects: string
   maxUsers: string
+  maxSiteUsers: string
   features: string
   isActive: boolean
+  product: 'DESKTOP' | 'WEB'
+  tier: '' | 'SOLO' | 'STUDIO' | 'BUSINESS' | 'ENTERPRISE'
 }
 
 const emptyForm: PlanForm = {
@@ -25,8 +28,11 @@ const emptyForm: PlanForm = {
   description: '',
   maxProjects: '10',
   maxUsers: '1',
+  maxSiteUsers: '0',
   features: '',
   isActive: true,
+  product: 'DESKTOP',
+  tier: '',
 }
 
 export function SubscriptionManager() {
@@ -70,8 +76,11 @@ export function SubscriptionManager() {
       description: plan.description,
       maxProjects: String(plan.maxProjects),
       maxUsers: String(plan.maxUsers),
+      maxSiteUsers: String(plan.maxSiteUsers ?? 0),
       features: JSON.parse(plan.features ?? '[]').join('\n'),
       isActive: plan.isActive,
+      product: plan.product === 'WEB' ? 'WEB' : 'DESKTOP',
+      tier: (plan.tier ?? '') as PlanForm['tier'],
     })
     setError('')
     setDrawerOpen(true)
@@ -105,8 +114,11 @@ export function SubscriptionManager() {
       description: form.description,
       maxProjects: parseInt(form.maxProjects) || 10,
       maxUsers: parseInt(form.maxUsers) || 1,
+      maxSiteUsers: parseInt(form.maxSiteUsers) || 0,
       features: JSON.stringify(featuresArr),
       isActive: form.isActive,
+      product: form.product,
+      tier: form.product === 'WEB' ? form.tier : null,
     }
 
     try {
@@ -204,7 +216,16 @@ export function SubscriptionManager() {
                   return (
                     <tr key={plan.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
-                        <p className="font-semibold text-gray-900">{plan.name}</p>
+                        <p className="font-semibold text-gray-900 flex items-center gap-2">
+                          {plan.name}
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${
+                              plan.product === 'WEB' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'
+                            }`}
+                          >
+                            {plan.product === 'WEB' ? `Web · ${plan.tier}` : 'Desktop'}
+                          </span>
+                        </p>
                         <p className="text-xs text-gray-400 mt-0.5 max-w-xs truncate">{plan.description}</p>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {features.slice(0, 3).map((f) => (
@@ -224,12 +245,15 @@ export function SubscriptionManager() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-semibold text-gray-900">{userCount}</span>
-                        <span className="text-gray-400 text-xs"> subscribers</span>
+                        <span className="font-semibold text-gray-900">
+                          {plan.product === 'WEB' ? (plan._count?.webSubscriptions ?? 0) : userCount}
+                        </span>
+                        <span className="text-gray-400 text-xs"> {plan.product === 'WEB' ? 'firms' : 'subscribers'}</span>
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
-                        <div>{plan.maxProjects === 9999 ? 'Unlimited' : plan.maxProjects} projects</div>
-                        <div>{plan.maxUsers === 9999 ? 'Unlimited' : plan.maxUsers} users</div>
+                        <div>{plan.maxProjects >= 9999 ? 'Unlimited' : plan.maxProjects} projects</div>
+                        <div>{plan.maxUsers >= 9999 ? 'Unlimited' : plan.maxUsers} {plan.product === 'WEB' ? 'seats' : 'users'}</div>
+                        {plan.product === 'WEB' && <div>{(plan.maxSiteUsers ?? 0) >= 9999 ? 'Unlimited' : plan.maxSiteUsers ?? 0} site seats</div>}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -314,7 +338,40 @@ export function SubscriptionManager() {
                 required
               />
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm font-medium text-gray-700">Product</label>
+                  <select
+                    name="product"
+                    value={form.product}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="DESKTOP">Desktop app</option>
+                    <option value="WEB">ARC PEM Web</option>
+                  </select>
+                </div>
+                {form.product === 'WEB' && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-gray-700">Web tier *</label>
+                    <select
+                      name="tier"
+                      value={form.tier}
+                      onChange={handleChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Choose…</option>
+                      <option value="SOLO">Solo</option>
+                      <option value="STUDIO">Studio</option>
+                      <option value="BUSINESS">Business</option>
+                      <option value="ENTERPRISE">Enterprise</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
                   label="Price (₹) *"
                   name="price"
@@ -352,7 +409,7 @@ export function SubscriptionManager() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
                   label="Max Projects"
                   name="maxProjects"
@@ -362,13 +419,23 @@ export function SubscriptionManager() {
                   onChange={handleChange}
                 />
                 <Input
-                  label="Max Users"
+                  label={form.product === 'WEB' ? 'Team seats' : 'Max Users'}
                   name="maxUsers"
                   type="number"
                   min="1"
                   value={form.maxUsers}
                   onChange={handleChange}
                 />
+                {form.product === 'WEB' && (
+                  <Input
+                    label="Site seats (100000 = unlimited)"
+                    name="maxSiteUsers"
+                    type="number"
+                    min="0"
+                    value={form.maxSiteUsers}
+                    onChange={handleChange}
+                  />
+                )}
               </div>
 
               <div className="flex flex-col gap-1">

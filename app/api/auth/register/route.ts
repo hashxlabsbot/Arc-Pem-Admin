@@ -80,10 +80,11 @@ export async function POST(req: NextRequest) {
     // Resolve plan: prefer explicit planId, fall back to name lookup
     let resolvedPlanId: string | undefined
     if (planId) {
+      // Web plans are subscriptions and only ever start from a payment; never attach one at sign-up.
       const plan = await db.plan.findUnique({ where: { id: planId } })
-      if (plan) resolvedPlanId = plan.id
+      if (plan && plan.product !== 'WEB') resolvedPlanId = plan.id
     } else if (planName) {
-      const plans = await db.plan.findMany({ select: { id: true, name: true } })
+      const plans = await db.plan.findMany({ where: { product: { not: 'WEB' } }, select: { id: true, name: true } })
       const match = plans.find((p) => p.name.toLowerCase() === planName.toLowerCase())
       if (match) resolvedPlanId = match.id
     }

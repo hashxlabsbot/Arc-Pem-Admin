@@ -69,7 +69,7 @@ export default function DemoBookingsPage() {
     <div className="space-y-5">
 
       {/* Summary Pills */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-gradient-to-br from-violet-50 to-purple-100 border border-violet-200/60 rounded-2xl p-4 flex items-center gap-3">
           <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center text-white shadow-md flex-shrink-0">
             <Video size={18} />

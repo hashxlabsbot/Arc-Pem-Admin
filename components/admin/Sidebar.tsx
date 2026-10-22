@@ -4,29 +4,30 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import {
-  LayoutDashboard, Users, BarChart3, CreditCard, LogOut,
-  Building2, ShieldCheck, Key, Bell, Activity, Settings, Wallet, FileText, TrendingUp, UserCog, Video,
+  X, LayoutDashboard, Users, BarChart3, CreditCard, LogOut,
+  Building2, ShieldCheck, Key, Bell, Activity, Settings, Wallet, FileText, TrendingUp, UserCog, Video, Globe,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const sections = [
   {
-    label: 'Subscribers',
+    label: 'ARC PEM',
     items: [
-      { href: '/admin',               label: 'Dashboard',     icon: LayoutDashboard, exact: true },
-      { href: '/admin/users',         label: 'Users',         icon: Users },
-      { href: '/admin/analytics',     label: 'Analytics',     icon: BarChart3 },
-      { href: '/admin/subscriptions', label: 'Subscriptions', icon: CreditCard },
-      { href: '/admin/payments',      label: 'Payments',      icon: Wallet },
+      { href: '/admin',                   label: 'Dashboard',  icon: LayoutDashboard, exact: true },
+      { href: '/admin/web-subscriptions', label: 'Firms',      icon: Globe },
+      { href: '/admin/subscriptions',     label: 'Plans',      icon: CreditCard },
+      { href: '/admin/payments',          label: 'Payments',   icon: Wallet },
+      { href: '/admin/users',             label: 'Customers',  icon: Users },
+      { href: '/admin/analytics',         label: 'Analytics',  icon: BarChart3 },
+      { href: '/admin/demo-bookings',     label: 'Demo Bookings', icon: Video },
     ],
   },
   {
-    label: 'Clients',
+    label: 'Legacy desktop',
     items: [
-      { href: '/admin/clients',       label: 'Clients',       icon: Building2 },
-      { href: '/admin/licenses',      label: 'Licenses',      icon: ShieldCheck },
-      { href: '/admin/api-keys',      label: 'API Keys',      icon: Key },
-      { href: '/admin/demo-bookings', label: 'Demo Bookings', icon: Video },
+      { href: '/admin/clients',  label: 'Clients',  icon: Building2 },
+      { href: '/admin/licenses', label: 'Licenses', icon: ShieldCheck },
+      { href: '/admin/api-keys', label: 'API Keys', icon: Key },
     ],
   },
   {
@@ -47,7 +48,12 @@ const sections = [
   },
 ]
 
-interface SidebarProps { user: { name?: string | null; email?: string | null }; role?: string }
+interface SidebarProps {
+  user: { name?: string | null; email?: string | null }
+  role?: string
+  open?: boolean
+  onClose?: () => void
+}
 
 function NavItem({ href, label, icon: Icon, exact }: { href: string; label: string; icon: React.ElementType; exact?: boolean }) {
   const pathname = usePathname()
@@ -68,7 +74,7 @@ function NavItem({ href, label, icon: Icon, exact }: { href: string; label: stri
   )
 }
 
-export function Sidebar({ user, role }: SidebarProps) {
+export function Sidebar({ user, role, open = false, onClose }: SidebarProps) {
   const initials = user.name
     ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : 'A'
@@ -79,7 +85,12 @@ export function Sidebar({ user, role }: SidebarProps) {
     : sections
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-64 bg-slate-900 flex flex-col z-40">
+    <aside
+      className={cn(
+        'fixed inset-y-0 left-0 w-64 max-w-[85vw] bg-slate-900 flex flex-col z-50 transition-transform duration-200 ease-out lg:translate-x-0',
+        open ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+      )}
+    >
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-700/60">
         <div className="w-9 h-9 rounded-lg bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/30 flex-shrink-0">
@@ -93,6 +104,14 @@ export function Sidebar({ user, role }: SidebarProps) {
           <p className="text-white font-bold text-sm leading-tight">ARC PEM</p>
           <p className="text-slate-400 text-xs">Admin Panel</p>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close menu"
+          className="lg:hidden ml-auto p-2 -mr-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       {/* Navigation */}

@@ -137,6 +137,35 @@ export function computeGst(
   }
 }
 
+/**
+ * The GST breakup of an amount that already **includes** tax, as charged for ARC PEM web subscriptions (the website
+ * adds GST at checkout). The taxable value is worked back from the total, so the invoice total is always exactly
+ * what the customer paid.
+ */
+export function computeGstFromTotal(
+  total: number,
+  sellerStateCode: string,
+  buyerStateCode: string,
+  taxRate: number
+): GstBreakup {
+  const gross = round2(total)
+  const taxableAmount = round2((gross * 100) / (100 + taxRate))
+  const taxAmount = round2(gross - taxableAmount)
+  if (sellerStateCode === buyerStateCode) {
+    const half = round2(taxAmount / 2)
+    return { taxRate, taxableAmount, cgst: half, sgst: round2(taxAmount - half), igst: 0, total: gross }
+  }
+  return { taxRate, taxableAmount, cgst: 0, sgst: 0, igst: taxAmount, total: gross }
+}
+
+/** Web subscription payments were charged with GST included; desktop licences had GST added on the invoice. */
+async function paymentIncludesTax(paymentId: string): Promise<boolean> {
+  const payment = await db.pendingPayment.findUnique({ where: { id: paymentId }, select: { planId: true } })
+  if (!payment) return false
+  const plan = await db.plan.findUnique({ where: { id: payment.planId }, select: { product: true } })
+  return plan?.product === 'WEB'
+}
+
 /** Indian financial year label for a date, e.g. 2026-06-18 -> "2026-27". */
 export function financialYear(date = new Date()): string {
   const y = date.getFullYear()
@@ -244,15 +273,16 @@ export async function generateInvoiceForPayment(payment: {
     }
   }
 
-  const [buyer, seller] = await Promise.all([
+  const [buyer, seller, taxIncluded] = await Promise.all([
     db.billingProfile.findUnique({ where: { userId: payment.userId } }),
     db.sellerProfile.findFirst(),
+    paymentIncludesTax(payment.id),
   ])
 
   if (!buyer) return { ok: false, reason: 'Buyer has no billing/GST details on file.' }
   if (!seller) return { ok: false, reason: 'Seller GST profile is not configured in Settings.' }
 
-  const gst = computeGst(payment.amount, seller.stateCode, buyer.stateCode, seller.taxRate)
+  const gst = (taxIncluded ? computeGstFromTotal : computeGst)(payment.amount, seller.stateCode, buyer.stateCode, seller.taxRate)
   const invoiceNumber = await nextInvoiceNumber(seller.invoicePrefix)
   const issuedAt = new Date()
 

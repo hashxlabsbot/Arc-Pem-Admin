@@ -21,6 +21,10 @@ type EnvKey =
   | 'UPSTASH_REDIS_REST_TOKEN'
   | 'ALLOWED_ORIGINS'
   | 'INTERNAL_API_KEY'
+  | 'WEB_APP_URL'
+  | 'WEB_APP_WEBHOOK_SECRET'
+  | 'RAZORPAY_KEY_ID'
+  | 'RAZORPAY_KEY_SECRET'
 
 const REQUIRED: EnvKey[] = ['DATABASE_URL', 'NEXTAUTH_SECRET', 'NEXTAUTH_URL']
 
@@ -61,6 +65,13 @@ export const env = {
   upstashToken: () => get('UPSTASH_REDIS_REST_TOKEN'),
   /** Shared secret the website must send (X-Internal-Key) to call server-to-server payment endpoints. */
   internalApiKey: () => get('INTERNAL_API_KEY'),
+  /** ARC PEM Web (app.arcpem.com): subscription changes made here are pushed to {WEB_APP_URL}/api/webhooks/accounts. */
+  webAppUrl: () => get('WEB_APP_URL')?.replace(/\/$/, ''),
+  /** Signs those pushes; same value as the website's WEB_APP_WEBHOOK_SECRET (first one signs while rotating). */
+  webAppWebhookSecret: () => get('WEB_APP_WEBHOOK_SECRET')?.split(',')[0]?.trim(),
+  /** Razorpay API keys (same account as the website): lets staff stop a firm's auto-renew from here. Optional. */
+  razorpayKeyId: () => get('RAZORPAY_KEY_ID'),
+  razorpayKeySecret: () => get('RAZORPAY_KEY_SECRET'),
   /** Comma-separated list of origins allowed for Server Actions / CORS. */
   allowedOrigins: (): string[] => {
     const raw = get('ALLOWED_ORIGINS')

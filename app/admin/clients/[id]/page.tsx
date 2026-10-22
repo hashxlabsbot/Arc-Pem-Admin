@@ -398,7 +398,7 @@ export default function ClientDetailPage() {
               <h2 className="text-base font-bold text-gray-900">Edit Client</h2>
             </div>
             <form onSubmit={handleEditSubmit} className="px-6 py-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Name <span className="text-red-500">*</span></label>
                   <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required
@@ -410,7 +410,7 @@ export default function ClientDetailPage() {
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Phone</label>
                   <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -427,7 +427,7 @@ export default function ClientDetailPage() {
                 <input type="text" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Plan</label>
                   <select value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })}

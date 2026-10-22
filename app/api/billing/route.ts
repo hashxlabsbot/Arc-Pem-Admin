@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { validateBillingProfile } from '@/lib/invoice'
 
-// Called by the external purchase app at checkout — keep CORS open like /api/auth/register.
+// Signed-in only (see POST); the open CORS headers let no one in without a session cookie for this site.
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -17,14 +17,19 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
 }
 
-// Create or update the buyer's GST/billing details. Identified by `email` in the
-// payload (purchase flow) or by the authenticated session.
+// Create or update a buyer's GST/billing details. Requires a session: customers can only change their own (they
+// normally do it on arcpem.com), admins may pass `email` to change any customer's. These details are printed on
+// GST invoices, so they must never be writable by someone who merely knows an email address.
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}))
     const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS })
+    }
 
-    const email = (body.email ?? session?.user?.email)?.trim().toLowerCase()
+    const requestedEmail = typeof body.email === 'string' ? body.email : undefined
+    const email = (session.user.role === 'ADMIN' && requestedEmail ? requestedEmail : session.user.email)?.trim().toLowerCase()
     if (!email) {
       return NextResponse.json({ error: 'email is required.' }, { status: 400, headers: CORS_HEADERS })
     }

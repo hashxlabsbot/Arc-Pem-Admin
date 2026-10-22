@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Info, Database, ShieldCheck, Users, Key, Building2 } from 'lucide-react'
 import { SellerProfileForm } from '@/components/admin/SellerProfileForm'
 import { EarlyAccessToggle } from '@/components/admin/EarlyAccessToggle'
+import { BillingSettingsForm } from '@/components/admin/BillingSettingsForm'
 
 interface Stats {
   totalUsers?: number
@@ -47,6 +48,9 @@ export default function SettingsPage() {
       {/* Launch control — open/close public registration for the event */}
       <EarlyAccessToggle />
 
+      {/* Add-on seat prices, free trial and annual discount for ARC PEM subscriptions */}
+      <BillingSettingsForm />
+
       {/* Seller / GST details for invoices */}
       <SellerProfileForm />
 
@@ -65,7 +69,7 @@ export default function SettingsPage() {
               { label: 'Application', value: 'ARC PEM Admin' },
               { label: 'Version', value: '1.0.0' },
               { label: 'Framework', value: 'Next.js 14 (App Router)' },
-              { label: 'Database', value: 'SQLite via Prisma' },
+              { label: 'Database', value: 'PostgreSQL via Prisma' },
               { label: 'Authentication', value: 'NextAuth.js + bcrypt' },
             ].map(({ label, value }) => (
               <div key={label} className="flex items-center justify-between py-3">

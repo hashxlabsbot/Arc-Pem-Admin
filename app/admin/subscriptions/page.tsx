@@ -11,8 +11,12 @@ export default function SubscriptionsPage() {
             <CreditCard size={16} />
           </div>
           <div>
-            <h2 className="font-bold text-gray-900">Subscription Plans</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Manage pricing plans available to your customers.</p>
+            <h2 className="font-bold text-gray-900">Plans</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Prices are monthly; annual billing, add-on seats and the free trial are set in{' '}
+              <a href="/admin/settings" className="text-indigo-600 underline">Settings</a>. Price 0 = Enterprise (sold by the team).
+              Changes reach the website within seconds.
+            </p>
           </div>
         </div>
         <div className="p-6">
