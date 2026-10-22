@@ -23,10 +23,11 @@ async function resyncWebFirmsOnPlan(planId: string) {
 }
 
 interface Params {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
-export async function PUT(req: NextRequest, { params }: Params) {
+export async function PUT(req: NextRequest, props: Params) {
+  const params = await props.params
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== 'ADMIN') {
@@ -77,7 +78,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, props: Params) {
+  const params = await props.params
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== 'ADMIN') {

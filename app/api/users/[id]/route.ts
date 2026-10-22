@@ -4,10 +4,11 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 interface Params {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== 'ADMIN') {
@@ -49,7 +50,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, props: Params) {
+  const params = await props.params
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== 'ADMIN') {

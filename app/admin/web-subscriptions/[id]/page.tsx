@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, use } from 'react';
 import Link from 'next/link'
 import { ArrowLeft, Download, ExternalLink, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -77,7 +77,8 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
 }
 
 /** One ARC PEM firm: its subscription, limits, payments and history, with every control staff need. */
-export default function FirmPage({ params }: { params: { id: string } }) {
+export default function FirmPage(props: { params: Promise<{ id: string }> }) {
+  const params = use(props.params)
   const [firm, setFirm] = useState<Firm | null>(null)
   const [activity, setActivity] = useState<Activity[]>([])
   const [plans, setPlans] = useState<WebPlan[]>([])
@@ -343,5 +344,5 @@ export default function FirmPage({ params }: { params: { id: string } }) {
         )}
       </div>
     </div>
-  )
+  );
 }

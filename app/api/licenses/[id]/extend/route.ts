@@ -5,7 +5,8 @@ import { db } from '@/lib/db'
 import { generateLicenseKey, licenseFileName } from '@/lib/license'
 import { logActivity } from '@/lib/activity'
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== 'ADMIN') {

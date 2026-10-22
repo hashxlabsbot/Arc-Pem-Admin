@@ -11,11 +11,12 @@ import { isTeamRole } from '@/lib/rbac'
 export const dynamic = 'force-dynamic'
 
 interface Params {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
 /** Update role/status/password for a staff account. ADMIN only; cannot target your own account (avoids self-lockout). */
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== 'ADMIN') {
@@ -79,7 +80,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 }
 
 /** Remove a staff account. ADMIN only; cannot target your own account. */
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(_req: NextRequest, props: Params) {
+  const params = await props.params
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== 'ADMIN') {

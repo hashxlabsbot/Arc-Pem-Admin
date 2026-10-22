@@ -24,7 +24,8 @@ const validLimit = (n: number | null) => n === null || (Number.isInteger(n) && n
  *   { action: 'resync' }                          re-send the current state
  */
 /** One firm in full: owner, plan, payments (with invoices), activity, and whether renewals can be stopped here. */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const session = await getServerSession(authOptions)
   if (session?.user.role !== 'ADMIN') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const sub = await db.webSubscription.findUnique({
@@ -66,7 +67,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   })
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const session = await getServerSession(authOptions)
   if (session?.user.role !== 'ADMIN') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

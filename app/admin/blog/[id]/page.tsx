@@ -17,7 +17,8 @@ function toDateInput(d: Date | null): string {
   return d ? new Date(d).toISOString().slice(0, 10) : ''
 }
 
-export default async function EditBlogPostPage({ params }: { params: { id: string } }) {
+export default async function EditBlogPostPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const post = await db.blogPost.findUnique({ where: { id: params.id } })
   if (!post) notFound()
 
