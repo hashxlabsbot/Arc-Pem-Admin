@@ -47,3 +47,6 @@ desktop.ini
 *.pem
 scripts/license-private.pem
 scripts/license-public.pem
+
+# production secrets for Vercel
+prod.env
