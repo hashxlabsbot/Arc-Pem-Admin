@@ -66,12 +66,13 @@ if (missing.length > 0) {
   console.warn(`${msg} (continuing in non-production)`)
 }
 
-// Checked when the production server starts, not during `next build` (which runs without production secrets), so a
-// deploy missing one fails at once and says which.
+// Checked when the production server starts, not during `next build` (which runs without production secrets). It only
+// logs: a missing launch variable must never take the whole admin down, it just disables that feature (see above).
 if (isProd && process.env.NEXT_PHASE !== 'phase-production-build') {
   const problems = launchConfigProblems()
   if (problems.length > 0) {
-    throw new Error(`[env] Production configuration is incomplete:\n  - ${problems.join('\n  - ')}\nSee docs/LAUNCH.md in ARCPEM-Web.`)
+    // eslint-disable-next-line no-console
+    console.error(`[env] Production configuration is incomplete:\n  - ${problems.join('\n  - ')}\nSee docs/LAUNCH.md in ARCPEM-Web.`)
   }
 }
 
