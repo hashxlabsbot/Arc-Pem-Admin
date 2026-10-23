@@ -15,7 +15,8 @@ async function requireBlogAccess() {
   return !!session && canManageBlog(session.user.role)
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   try {
     if (!(await requireBlogAccess())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const post = await db.blogPost.findUnique({ where: { id: params.id } })
@@ -27,7 +28,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   try {
     if (!(await requireBlogAccess())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -68,7 +70,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   try {
     if (!(await requireBlogAccess())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

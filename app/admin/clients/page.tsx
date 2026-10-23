@@ -128,7 +128,7 @@ export default function ClientsPage() {
     <div className="space-y-5">
 
       {/* Summary Pills */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-gradient-to-br from-violet-50 to-purple-100 border border-violet-200/60 rounded-2xl p-4 flex items-center gap-3">
           <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center text-white shadow-md flex-shrink-0">
             <Building2 size={18} />
@@ -300,7 +300,7 @@ export default function ClientsPage() {
               {error && (
                 <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-xl border border-red-100">{error}</div>
               )}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Name <span className="text-red-500">*</span></label>
                   <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required
@@ -312,7 +312,7 @@ export default function ClientsPage() {
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Phone</label>
                   <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -329,7 +329,7 @@ export default function ClientsPage() {
                 <input type="text" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Plan</label>
                   <select value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })}

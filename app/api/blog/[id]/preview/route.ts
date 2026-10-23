@@ -8,7 +8,8 @@ import { canManageBlog } from '@/lib/rbac'
 export const dynamic = 'force-dynamic'
 
 /** Returns a short-lived signed preview URL on the marketing site for the admin editor's iframe. */
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
   const session = await getServerSession(authOptions)
   if (!session || !canManageBlog(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

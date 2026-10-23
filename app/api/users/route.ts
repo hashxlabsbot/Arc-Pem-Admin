@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
         where,
         include: {
           plan: { select: { id: true, name: true, price: true, period: true } },
+          webSubscription: { select: { id: true, firmName: true, status: true, plan: { select: { name: true } } } },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,

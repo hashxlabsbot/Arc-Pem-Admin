@@ -61,7 +61,7 @@ export default async function PaymentsPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: 'Pending',  value: pending,  color: 'amber',   bg: 'bg-amber-50',   border: 'border-amber-200', text: 'text-amber-700'  },
           { label: 'Approved', value: approved, color: 'emerald', bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700' },

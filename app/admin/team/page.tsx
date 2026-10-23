@@ -165,7 +165,8 @@ export default function TeamPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+<table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
               <th className="px-5 py-3">Name</th>
@@ -224,6 +225,7 @@ export default function TeamPage() {
             )}
           </tbody>
         </table>
+</div>
         <Pagination pagination={pagination} onPageChange={setPage} label="team member" />
       </div>
 
@@ -349,7 +351,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         </div>
         <div>
           <label className={labelCls}>Role</label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <button type="button" onClick={() => setRole('BLOG_EDITOR')}
               className={`px-3 py-2.5 rounded-lg text-sm font-semibold border text-left transition ${role === 'BLOG_EDITOR' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
               Blog Editor
@@ -422,7 +424,7 @@ function EditModal({ member, onClose, onSaved }: { member: TeamMember; onClose: 
         </div>
         <div>
           <label className={labelCls}>Role</label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <button type="button" onClick={() => setRole('BLOG_EDITOR')}
               className={`px-3 py-2.5 rounded-lg text-sm font-semibold border text-left transition ${role === 'BLOG_EDITOR' ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
               Blog Editor

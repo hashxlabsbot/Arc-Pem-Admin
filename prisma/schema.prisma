@@ -31,6 +31,8 @@ model User {
   planExpiresAt DateTime?
   billingProfile BillingProfile?
   invoices     Invoice[]
+  // ARC PEM Web (app.arcpem.com): the firm this user owns there, if they bought the web plan.
+  webSubscription WebSubscription?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -59,10 +61,116 @@ model Plan {
   features    String
   maxProjects Int      @default(10)
   maxUsers    Int      @default(1)
+  // WEB plans: site seats included (Site engineer, Supervisor). 100000 = unlimited.
+  maxSiteUsers Int     @default(0)
   isActive    Boolean  @default(true)
+  // DESKTOP = machine-licensed desktop app (sets User.planId); WEB = ARC PEM Web at app.arcpem.com (a WebSubscription).
+  product     String   @default("DESKTOP")
+  // WEB plans only: the app's plan tier, SOLO | STUDIO | BUSINESS | ENTERPRISE. maxProjects/maxUsers are its project/seat limits.
+  tier        String?
   users       User[]
+  webSubscriptions WebSubscription[]
+  razorpayPlans    RazorpayPlan[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([product, isActive])
+}
+
+// ── ARC PEM Web (app.arcpem.com) ─────────────────────────────────────────────
+// The web app keeps its own database. These tables are what it is told: who owns which firm, on which plan, until
+// when. Every change is queued in WebhookOutbox and pushed to the app; the app also reads it at owner sign-in.
+
+/// One firm's web subscription, owned by the user who bought it (the firm owner who signs in to the app).
+model WebSubscription {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firmName         String
+  planId           String
+  plan             Plan      @relation(fields: [planId], references: [id])
+  // ACTIVE | PAST_DUE | EXPIRED | SUSPENDED | CANCELED. Lapsing at currentPeriodEnd is handled by the app itself.
+  status           String    @default("ACTIVE")
+  currentPeriodEnd DateTime?
+  // Overrides of the plan's seats/projects (extra seats, custom deals); null = the plan's maxUsers/maxProjects.
+  seatLimit        Int?
+  projectLimit     Int?
+  // MONTH | YEAR. Renewed automatically while autoRenew is true (a Razorpay subscription is running).
+  billingInterval  String    @default("YEAR")
+  autoRenew        Boolean   @default(false)
+  siteSeatLimit    Int?
+  // Add-on seats bought with the current subscription, on top of the plan's.
+  extraSeats       Int       @default(0)
+  extraSiteSeats   Int       @default(0)
+  // Set while the firm is on its free trial (no payment taken yet).
+  trialEndsAt      DateTime?
+  razorpaySubscriptionId String? @unique
+  payments         WebSubscriptionPayment[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status, currentPeriodEnd])
+}
+
+/// The Razorpay plan object behind each (plan, billing interval, price); a price change gets a new one.
+model RazorpayPlan {
+  id              String   @id
+  planId          String
+  plan            Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  billingInterval String
+  amountPaise     Int
+  createdAt       DateTime @default(now())
+
+  @@unique([planId, billingInterval, amountPaise])
+}
+
+/// Each paid term. `paymentRef` is unique, so a payment reported twice (website + admin webhooks, retries) extends
+/// the subscription exactly once.
+model WebSubscriptionPayment {
+  id             String          @id @default(cuid())
+  subscriptionId String
+  subscription   WebSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  paymentRef     String          @unique
+  planId         String
+  amount         Float
+  periodStart    DateTime
+  periodEnd      DateTime
+  createdAt      DateTime        @default(now())
+
+  @@index([subscriptionId, createdAt])
+}
+
+/// Events waiting to be delivered to app.arcpem.com (transactional outbox: written in the same transaction as the
+/// change, delivered after, retried with backoff until acknowledged).
+model WebhookOutbox {
+  id            String    @id
+  type          String
+  payload       Json
+  // PENDING | DELIVERED | FAILED (gave up after max attempts; retry from admin)
+  status        String    @default("PENDING")
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  lastError     String?
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([status, nextAttemptAt])
+  @@index([createdAt])
+}
+
+/// Single-use OpenID Connect authorization codes issued by arcpem.com to app.arcpem.com (stored hashed).
+model OidcAuthCode {
+  codeHash      String   @id
+  userId        String
+  clientId      String
+  redirectUri   String
+  scope         String
+  nonce         String?
+  codeChallenge String
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([expiresAt])
 }
 
 model Client {
@@ -173,6 +281,7 @@ model ActivityLog {
   // Fast-growing table: index the columns the activity feed filters/sorts on.
   @@index([createdAt])
   @@index([action, createdAt])
+  @@index([entityId, createdAt])
 }
 
 // Buyer's GST/billing details, collected at plan purchase. One per user.
@@ -357,4 +466,16 @@ model BlogPostVisit {
   visitorHash String
 
   @@id([slug, date, visitorHash])
+}
+
+/// Billing rules editable from admin Settings (one row, id 'default'). Mirrored in the customer website's schema.
+model BillingSettings {
+  id                   String   @id @default("default")
+  seatAddonMonthly     Int      @default(599)
+  siteSeatAddonMonthly Int      @default(199)
+  annualBilledMonths   Int      @default(10)
+  trialDays            Int      @default(14)
+  maxAddonSeats        Int      @default(50)
+  updatedAt            DateTime @default(now()) @updatedAt
+  updatedBy            String?
 }

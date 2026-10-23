@@ -4,10 +4,11 @@ import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 interface Params {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
-export async function PATCH(req: NextRequest, { params }: Params) {
+export async function PATCH(req: NextRequest, props: Params) {
+  const params = await props.params
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== 'ADMIN') {
@@ -16,6 +17,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const body = await req.json()
     const { status, planId } = body
+
+    // Web plans are subscriptions held by firms (Firms page), never a user's desktop plan.
+    if (planId) {
+      const plan = await db.plan.findUnique({ where: { id: String(planId) }, select: { product: true } })
+      if (plan?.product === 'WEB') {
+        return NextResponse.json({ error: 'ARC PEM plans are managed per firm on the Firms page.' }, { status: 400 })
+      }
+    }
 
     const updateData: Record<string, unknown> = {}
     if (status !== undefined) updateData.status = status
@@ -41,7 +50,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: Params) {
+export async function DELETE(req: NextRequest, props: Params) {
+  const params = await props.params
   try {
     const session = await getServerSession(authOptions)
     if (!session || session.user.role !== 'ADMIN') {

@@ -295,7 +295,7 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
         {/* Core */}
         <Section title="Article">
           <Field label="Title"><input className={inputCls} value={form.title} onChange={(e) => onTitleChange(e.target.value)} placeholder="How to …" /></Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="URL slug">
               <input className={inputCls} value={form.slug}
                 onChange={(e) => { setSlugTouched(true); set('slug', slugify(e.target.value)) }}
@@ -424,11 +424,11 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
 
         {/* SEO / meta */}
         <Section title="SEO & Metadata">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="SEO title override (optional)"><input className={inputCls} value={form.seoTitle} onChange={(e) => set('seoTitle', e.target.value)} placeholder="Defaults to the title" /></Field>
             <Field label="Tags (comma-separated)"><input className={inputCls} value={form.tags.join(', ')} onChange={(e) => set('tags', e.target.value.split(',').map((t) => t.trim()).filter(Boolean))} placeholder="gst, billing" /></Field>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Cover image path/URL (optional — else auto card)">
               <div className="flex gap-2">
                 {form.coverImage && (
@@ -458,11 +458,11 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
 
         {/* Author + publishing */}
         <Section title="Author & Publishing">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Author name (optional — else ARC PEM Team)"><input className={inputCls} value={form.authorName} onChange={(e) => set('authorName', e.target.value)} /></Field>
             <Field label="Author role"><input className={inputCls} value={form.authorRole} onChange={(e) => set('authorRole', e.target.value)} placeholder="Founder, HashX Labs" /></Field>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Publish date (optional)"><input type="date" className={inputCls} value={form.publishedAt} onChange={(e) => set('publishedAt', e.target.value)} /></Field>
             <Field label="“Updated” date (optional — editorial signal)"><input type="date" className={inputCls} value={form.updatedDate} onChange={(e) => set('updatedDate', e.target.value)} /></Field>
           </div>
@@ -510,7 +510,7 @@ export default function BlogEditor({ initial, mode }: { initial: BlogFormData; m
         <Section title="HowTo (optional — emits step-by-step schema)">
           {form.howto ? (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="HowTo name"><input className={inputCls} value={form.howto.name} onChange={(e) => set('howto', { ...form.howto!, name: e.target.value })} /></Field>
                 <Field label="HowTo description"><input className={inputCls} value={form.howto.description} onChange={(e) => set('howto', { ...form.howto!, description: e.target.value })} /></Field>
               </div>

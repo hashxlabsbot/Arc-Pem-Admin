@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { revalidateMarketingPricing } from '@/lib/blog-revalidate'
+import { parsePlanProduct } from '@/lib/plan-product'
 
 // Authenticated, per-request endpoint — never statically prerender.
 export const dynamic = 'force-dynamic'
@@ -15,7 +17,7 @@ export async function GET() {
 
     const plans = await db.plan.findMany({
       include: {
-        _count: { select: { users: true } },
+        _count: { select: { users: true, webSubscriptions: true } },
       },
       orderBy: { createdAt: 'asc' },
     })
@@ -48,6 +50,8 @@ export async function POST(req: NextRequest) {
     if (!isFinite(priceNum) || priceNum < 0) {
       return NextResponse.json({ error: 'price must be a non-negative number' }, { status: 400 })
     }
+    const kind = parsePlanProduct(body.product, body.tier)
+    if ('error' in kind) return NextResponse.json({ error: kind.error }, { status: 400 })
 
     const plan = await db.plan.create({
       data: {
@@ -58,10 +62,14 @@ export async function POST(req: NextRequest) {
         features: features ?? '[]',
         maxProjects: Number(maxProjects) || 10,
         maxUsers: Number(maxUsers) || 1,
+        maxSiteUsers: Math.max(0, Number(body.maxSiteUsers) || 0),
         isActive: isActive ?? true,
+        product: kind.product,
+        tier: kind.tier,
       },
     })
 
+    await revalidateMarketingPricing()
     return NextResponse.json({ plan }, { status: 201 })
   } catch (err) {
     console.error('[POST /api/subscriptions]', err)

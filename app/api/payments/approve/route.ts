@@ -6,6 +6,57 @@ import { sendApprovalEmail } from '@/lib/email'
 import { logActivity } from '@/lib/activity'
 import { generateInvoiceForPayment } from '@/lib/invoice'
 import { planExpiryAfterPayment } from '@/lib/pricing'
+import { activateWebTerm, deliverOutbox, isDuplicatePayment } from '@/lib/web-app'
+import type { PendingPayment, Plan, User } from '@prisma/client'
+
+/**
+ * A bank-transfer payment for an ARC PEM Web plan: applies the paid year to the firm's web subscription (no
+ * desktop license or Client record), tells the web app, then invoices and emails like any other approval.
+ */
+async function approveWebPayment(payment: PendingPayment, plan: Plan, user: User) {
+  let eventId: string | null = null
+  try {
+    eventId = await db.$transaction(async (tx) => {
+      await tx.pendingPayment.update({ where: { id: payment.id }, data: { status: 'approved' } })
+      const term = await activateWebTerm(tx, {
+        userId: payment.userId,
+        plan,
+        paymentRef: `manual:${payment.id}`,
+        amount: payment.amount,
+      })
+      return term.eventId
+    })
+  } catch (err) {
+    if (isDuplicatePayment(err)) return NextResponse.json({ error: 'Payment already processed' }, { status: 409 })
+    throw err
+  }
+  await deliverOutbox({ ids: [eventId] }).catch((err) => console.error('[approve] web-app delivery failed (will retry):', err))
+  await logActivity('APPROVE', 'Payment', payment.id, `Approved ${payment.planName} (ARC PEM Web) for user ${payment.userId}`)
+
+  let invoiceGenerated = false
+  let invoiceAttachment: { fileName: string; pdf: Uint8Array } | undefined
+  try {
+    const result = await generateInvoiceForPayment({
+      id: payment.id,
+      userId: payment.userId,
+      planName: payment.planName,
+      amount: payment.amount,
+    })
+    if (result.ok) {
+      invoiceGenerated = true
+      invoiceAttachment = { fileName: result.fileName, pdf: result.pdf }
+      await logActivity('INVOICE_GENERATED', 'Invoice', result.invoiceId, `Invoice ${result.invoiceNumber} for user ${payment.userId}`)
+    }
+  } catch (err) {
+    console.error('[invoice] generation failed:', err)
+  }
+  try {
+    await sendApprovalEmail({ to: user.email, name: user.name, planName: payment.planName, invoice: invoiceAttachment, product: 'WEB' })
+    return NextResponse.json({ success: true, emailSent: true, invoiceGenerated })
+  } catch (err) {
+    return NextResponse.json({ success: true, emailSent: false, emailError: String(err), invoiceGenerated })
+  }
+}
 
 // pdf-lib + Prisma Bytes need the Node.js runtime (not Edge).
 export const runtime = 'nodejs'
@@ -27,6 +78,9 @@ export async function POST(req: NextRequest) {
 
   const user = await db.user.findUnique({ where: { id: payment.userId } })
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+  const plan = await db.plan.findUnique({ where: { id: payment.planId } })
+  if (plan?.product === 'WEB') return approveWebPayment(payment, plan, user)
 
   // Activate the plan (with a one-year license term) and mark payment approved
   // atomically. Renewal-safe: extends from any remaining term.

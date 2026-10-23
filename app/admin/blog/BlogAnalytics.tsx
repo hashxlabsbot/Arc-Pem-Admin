@@ -150,7 +150,8 @@ export default function BlogAnalytics() {
           <h3 className="font-bold text-gray-900 text-sm">All posts</h3>
           <p className="text-xs text-gray-400 mt-0.5">Ranked by all-time views · window columns reflect the {days}-day range</p>
         </div>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+<table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
               <th className="px-5 py-3">Post</th>
@@ -195,6 +196,7 @@ export default function BlogAnalytics() {
             )}
           </tbody>
         </table>
+</div>
       </div>
     </div>
   )

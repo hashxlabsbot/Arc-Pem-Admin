@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+    branches: [main, developer]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: arcpem
+          POSTGRES_PASSWORD: arcpem
+          POSTGRES_DB: accounts
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U arcpem -d accounts" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      # A throwaway database for this run only. This app owns the accounts schema and its migrations.
+      DATABASE_URL: postgresql://arcpem:arcpem@localhost:5432/accounts?schema=public
+      DIRECT_URL: postgresql://arcpem:arcpem@localhost:5432/accounts?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ci-only-secret-not-for-production-use-0123456789
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - name: Migrations apply to an empty database
+        run: npx prisma migrate deploy
+      - name: Migrations build exactly the schema
+        run: |
+          drift=$(npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script | grep -E '^(CREATE|ALTER|DROP)' || true)
+          if [ -n "$drift" ]; then echo "Schema drift between migrations and schema.prisma:"; echo "$drift"; exit 1; fi
+      - run: npm run build

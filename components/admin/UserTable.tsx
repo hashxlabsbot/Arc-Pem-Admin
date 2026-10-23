@@ -45,7 +45,7 @@ export function UserTable({ search, statusFilter, planFilter }: UserTableProps) 
   useEffect(() => {
     fetch('/api/subscriptions')
       .then((r) => r.json())
-      .then((d) => setPlans(d.plans ?? []))
+      .then((d) => setPlans((d.plans ?? []).filter((p: PlanWithCount) => p.product !== 'WEB')))
       .catch(() => {})
   }, [])
 
@@ -145,7 +145,7 @@ export function UserTable({ search, statusFilter, planFilter }: UserTableProps) 
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">User</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Role</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Plan</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">ARC PEM plan</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Joined</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
@@ -180,7 +180,19 @@ export function UserTable({ search, statusFilter, planFilter }: UserTableProps) 
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-gray-600">
-                    {user.plan?.name ?? <span className="text-gray-300">—</span>}
+                    {user.webSubscription ? (
+                      <a href={`/admin/web-subscriptions/${user.webSubscription.id}`} className="block text-indigo-700 hover:underline">
+                        {user.webSubscription.plan.name.replace(/^web\s+/i, 'ARC PEM ')}
+                        <span className="block text-[11px] text-gray-400">{user.webSubscription.firmName} · {user.webSubscription.status}</span>
+                      </a>
+                    ) : null}
+                    {user.plan ? (
+                      <span className={user.webSubscription ? 'block text-[11px] text-gray-400' : ''}>
+                        {user.webSubscription ? 'Desktop: ' : ''}{user.plan.name}
+                      </span>
+                    ) : !user.webSubscription ? (
+                      <span className="text-gray-300">—</span>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                     {formatDate(user.createdAt)}

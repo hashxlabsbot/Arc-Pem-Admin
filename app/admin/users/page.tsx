@@ -14,7 +14,8 @@ export default function UsersPage() {
   useEffect(() => {
     fetch('/api/subscriptions')
       .then((r) => r.json())
-      .then((d) => setPlans(d.plans ?? []))
+      // Users carry desktop plans; web plans belong to firms (Web Firms page).
+      .then((d) => setPlans((d.plans ?? []).filter((p: PlanWithCount) => p.product !== 'WEB')))
       .catch(() => {})
   }, [])
 

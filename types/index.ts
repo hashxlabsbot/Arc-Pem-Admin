@@ -31,6 +31,7 @@ export interface UserWithPlan {
     price: number
     period: string
   } | null
+  webSubscription?: { id: string; firmName: string; status: string; plan: { name: string } } | null
   createdAt: Date | string
   updatedAt: Date | string
 }
@@ -44,11 +45,15 @@ export interface PlanWithCount {
   features: string
   maxProjects: number
   maxUsers: number
+  maxSiteUsers?: number
   isActive: boolean
+  product: string
+  tier: string | null
   createdAt: Date | string
   updatedAt: Date | string
   _count?: {
     users: number
+    webSubscriptions?: number
   }
   userCount?: number
 }

@@ -123,7 +123,8 @@ export default function BlogListPage() {
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+<table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
               <th className="px-5 py-3">Title</th>
@@ -189,6 +190,7 @@ export default function BlogListPage() {
             )}
           </tbody>
         </table>
+</div>
         <Pagination pagination={pagination} onPageChange={setPage} label="post" />
       </div>
 
